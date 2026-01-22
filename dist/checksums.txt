@@ -1,0 +1,2 @@
+fa700d9e03b1d0de4f4654bbee76feff399d49def5f5f63748bc99adcd3cbf98  sentinel-amd64
+32d2fd1f9dfeb204e46fc29198a8f430ac24484c87bc651ac9e364fd6202c036  sentinel-arm64

@@ -59,7 +59,7 @@ graph TD
 * macOS (Optimized for Ventura+, compatible with Intel & Silicon).
 * **Root Privileges**: Required to access `powermetrics` (thermals), `log stream` (security), and `pfctl` (firewall).
 
-### Option A: Build from Source (Recommended)
+### Option A: Build from Source 
 
 1. **Clone & Init:**
 ```bash
@@ -86,7 +86,13 @@ sudo mv sentinel /usr/local/bin/
 
 ```
 
+### Option B: Build from Source 
+####  Fast Install
 
+You can install Sentinel with a single command. This script automatically detects your Mac type (Intel vs M1/M2) and downloads the correct binary.
+
+```bash
+curl -sfL [https://raw.githubusercontent.com/francose/sentinel-maas/main/install.sh](https://raw.githubusercontent.com/francose/sentinel-maas/main/install.sh) | sudo sh
 
 ---
 
@@ -148,6 +154,23 @@ How to use Sentinel as a "MaaS" tool for debugging:
 * **Fix:** Sentinel is a security tool; it needs root access to read the Kernel Firewall and Thermal Sensors. Always run with `sudo`.
 
 
+
+### For M1/M2/M3 Macs:
+
+```Bash
+
+sudo curl -L [https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-arm64](https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-arm64) -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+```
+
+### For Intel Macs:
+
+```Bash
+
+sudo curl -L [https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-amd64](https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-amd64) -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+
+```
 
 ---
 
