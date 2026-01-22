@@ -87,12 +87,13 @@ sudo mv sentinel /usr/local/bin/
 ```
 
 ### Option B: Build from Source 
-####  Fast Install
+#### Fast Install
 
 You can install Sentinel with a single command. This script automatically detects your Mac type (Intel vs M1/M2) and downloads the correct binary.
 
 ```bash
-curl -sfL [https://raw.githubusercontent.com/francose/sentinel-maas/main/install.sh](https://raw.githubusercontent.com/francose/sentinel-maas/main/install.sh) | sudo sh
+curl -sfL https://raw.githubusercontent.com/francose/sentinel-maas/main/install.sh | sudo sh
+```
 
 ---
 
@@ -104,6 +105,26 @@ Run Sentinel with `sudo` to enable full sensor access:
 sudo sentinel
 
 ```
+
+
+### For M1/M2/M3 Macs:
+
+```Bash
+
+sudo curl -L https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-arm64 -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+```
+
+### For Intel Macs:
+
+```Bash
+
+sudo curl -L https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-amd64 -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+
+```
+
+
 
 ### Dashboard Controls
 
@@ -155,25 +176,8 @@ How to use Sentinel as a "MaaS" tool for debugging:
 
 
 
-### For M1/M2/M3 Macs:
-
-```Bash
-
-sudo curl -L [https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-arm64](https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-arm64) -o /usr/local/bin/sentinel
-sudo chmod +x /usr/local/bin/sentinel
-```
-
-### For Intel Macs:
-
-```Bash
-
-sudo curl -L [https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-amd64](https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-amd64) -o /usr/local/bin/sentinel
-sudo chmod +x /usr/local/bin/sentinel
-
-```
-
 ---
 
 ## License
 
-MIT License. Open source and ready for modification.
+[MIT License](LICENSE)
