@@ -1,8 +1,5 @@
-Here is the clean, professional version of the `README.md` with all emojis removed.
 
----
-
-# Sentinel
+# Sentinel MaaS
 
 ### AI-Native MaaS Agent & Telemetry Dashboard
 
@@ -20,7 +17,7 @@ Sentinel operates as a hybrid **Edge Agent**. It runs locally on the endpoint, c
 graph TD
     subgraph "The Sentinel Agent (Edge)"
         A[Hardware Sensors] -->|Thermals/Load| Core(Engine)
-        B[Network Stack] -->|Zeek-style Flows| Core
+        B[Network Stack] -->|Zeek Flows| Core
         C[Security Subsystem] -->|Auth Logs/Firewall| Core
         Core -->|Visualizes| TUI[Terminal Dashboard]
         Core -->|Serializes| JSON[sentinel_dump.json]
