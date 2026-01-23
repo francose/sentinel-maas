@@ -6,10 +6,10 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Sentinel v1.1.0 - The AI's Eyes & Hands                                 │
+│ Sentinel v1.2.0 - The AI's Eyes & Hands                                 │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  👁️  EYES: CPU, Thermals, Network Flows, Security Logs, Firewall Status │
-│  🤚 HANDS: Kill Processes, Block IPs, Enable Firewall, Fleet Reporting  │
+│  👁️  EYES: CPU, Thermals, Network Flows, Security Logs, Asset Inventory │
+│  🤚 HANDS: Kill Processes, Block IPs, Port Scan, Security Audit         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -25,6 +25,9 @@
 | **Network Flows** | Zeek-style connection tracking (Process → IP mapping) |
 | **Security Logs** | Live `com.apple.securityd` event stream |
 | **Firewall Status** | Monitors pf and Application Firewall state |
+| **Top Processes** | CPU/memory sorted process list |
+| **Asset Inventory** | Full system hardware/software inventory |
+| **Network Stats** | Interface bandwidth and connection counts |
 
 ### 🛠️ Remediation (The Hands)
 
@@ -34,6 +37,9 @@
 | **Block IP** | `--block-ip <IP>` | Block malicious IPs via pf |
 | **Unblock IP** | `--unblock-ip <IP>` | Remove IP from blocklist |
 | **Fix Firewall** | `--fix-firewall` | Enable macOS Application Firewall |
+| **Restart Service** | `--restart-service <label>` | Restart launchd services |
+| **Port Scanner** | `--scan-ports <target>` | Scan for open ports |
+| **Security Audit** | `--security-audit` | Security posture assessment |
 
 ### 📡 Fleet Mode (Remote Reporting)
 
@@ -48,22 +54,43 @@
 
 ### Option A: Download Pre-built Binary (Recommended)
 
-Download the latest release for your Mac:
+Download the latest release for your platform:
+
+#### macOS
 
 | Platform | Binary | SHA-256 |
 |----------|--------|---------|
-| **Apple Silicon** (M1/M2/M3) | [sentinel-darwin-arm64](dist/sentinel-darwin-arm64) | `e0d2c65b36c36b49d633a1c857679d3a12076f73bf34f6786d3d7959a13dd58b` |
-| **Intel Mac** | [sentinel-darwin-amd64](dist/sentinel-darwin-amd64) | `8d3ee0733d6ac938feb9a2dc331b1f53b510dfdc41ae7fe2b223c94592654a52` |
+| **Apple Silicon** (M1/M2/M3) | [sentinel-darwin-arm64](dist/sentinel-darwin-arm64) | `6ba90d3a8c7f0c32dd7009a17712127d70526ab1658c083902434c8cce1eab6b` |
+| **Intel Mac** | [sentinel-darwin-amd64](dist/sentinel-darwin-amd64) | `dcd6013dff84793c8567260b3290aee4d8c4b8524116319528aa86e356feda6f` |
 
 ```bash
 # For Apple Silicon (M1/M2/M3)
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.1.0/sentinel-darwin-arm64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-darwin-arm64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 
 # For Intel Mac
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.1.0/sentinel-darwin-amd64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-darwin-amd64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 ```
+
+#### Linux (Beta)
+
+| Platform | Binary | SHA-256 |
+|----------|--------|---------|
+| **Linux x86_64** | [sentinel-linux-amd64](dist/sentinel-linux-amd64) | `cc1d30ab7b82135206078b2a6ba8344fb72e1eaa12464c27e5eb1899c86a256d` |
+| **Linux ARM64** | [sentinel-linux-arm64](dist/sentinel-linux-arm64) | `c306028c43470b95aa3debcca61c4caf17389759c4741cb442e1275afb3bd060` |
+
+```bash
+# For Linux x86_64
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-linux-amd64 -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+
+# For Linux ARM64 (Raspberry Pi, AWS Graviton, etc.)
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-linux-arm64 -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+```
+
+> **Note:** Linux support is in beta. Core monitoring (CPU, memory, processes, network stats) works. Thermal monitoring requires `lm-sensors`. Firewall uses iptables/ufw. Service management uses systemd.
 
 ### Option B: Quick Install Script
 
@@ -136,6 +163,34 @@ sentinel --list-blocked
 
 # Enable firewall
 sudo sentinel --fix-firewall
+
+# Restart a service
+sudo sentinel --restart-service com.apple.example
+
+# Scan ports on a target
+sentinel --scan-ports localhost --port-range 80,443,22
+
+# Run security audit
+sentinel --security-audit
+```
+
+### System Information Commands
+
+```bash
+# Top processes by CPU/memory
+sentinel --top --top-count 10
+
+# Full asset inventory
+sentinel --asset-info
+
+# Network interface stats
+sentinel --network-stats
+
+# Check for macOS updates
+sentinel --check-updates
+
+# List launchd services
+sentinel --services
 ```
 
 ### Fleet/Webhook Mode
@@ -191,6 +246,15 @@ Sentinel is designed to work with the **Model Context Protocol (MCP)**. The `sen
 | `terminate_process` | `--kill` | "Kill the runaway ffmpeg process" |
 | `block_ip_address` | `--block-ip` | "Block this suspicious IP" |
 | `enable_firewall` | `--fix-firewall` | "The firewall is disabled, fix it" |
+| `get_top_processes` | `--top` | "What's using all my CPU?" |
+| `restart_service` | `--restart-service` | "Restart the web server" |
+| `scan_ports` | `--scan-ports` | "Check what ports are open" |
+| `get_asset_info` | `--asset-info` | "What hardware is this machine?" |
+| `get_network_stats` | `--network-stats` | "Show network bandwidth" |
+| `security_audit` | `--security-audit` | "Is this system secure?" |
+| `check_updates` | `--check-updates` | "Are there OS updates?" |
+
+See [MCP_SPECIFICATION.md](MCP_SPECIFICATION.md) for complete MCP tool definitions.
 
 ---
 
@@ -198,7 +262,9 @@ Sentinel is designed to work with the **Model Context Protocol (MCP)**. The `sen
 
 ```
 Usage of sentinel:
+  -asset-info           Show full system asset information
   -block-ip string      Block an IP address using pf firewall
+  -check-updates        Check for available macOS updates
   -config string        Path to config file (default "/etc/sentinel/config.yaml")
   -daemon               Run as daemon, sending telemetry to configured webhook
   -fix-firewall         Enable the macOS Application Firewall
@@ -206,6 +272,14 @@ Usage of sentinel:
   -json                 Output JSON telemetry to stdout and exit
   -kill int             Terminate a process by PID
   -list-blocked         List all blocked IP addresses
+  -network-stats        Show network interface statistics
+  -port-range string    Port range to scan (default "1-1024")
+  -restart-service      Restart a launchd service by label
+  -scan-ports string    Scan ports on target (e.g., localhost, 192.168.1.1)
+  -security-audit       Run security posture audit
+  -services             List running services (LaunchDaemons/Agents)
+  -top                  Show top processes by CPU/memory usage
+  -top-count int        Number of processes to show (default 10)
   -unblock-ip string    Unblock a previously blocked IP address
   -version              Print version and exit
   -webhook string       Send telemetry to webhook URL (one-shot)
@@ -247,9 +321,33 @@ All commands return structured JSON with error codes for programmatic handling:
 
 ## Requirements
 
+### macOS
 - **macOS** (Ventura+ recommended, Intel & Apple Silicon)
 - **Root privileges** for thermal sensors, firewall, and process control
 - **Go 1.21+** (for building from source)
+
+### Linux (Beta)
+- **Linux** (Ubuntu 20.04+, Debian 11+, RHEL 8+, or similar)
+- **Root privileges** for firewall (iptables/ufw) and service management
+- **lm-sensors** (optional, for temperature monitoring)
+- **systemd** for service management
+- **Go 1.21+** (for building from source)
+
+---
+
+## Platform Support Matrix
+
+| Feature | macOS | Linux |
+|---------|-------|-------|
+| CPU/Memory Monitoring | ✅ | ✅ |
+| Temperature Monitoring | ✅ powermetrics | ⚠️ lm-sensors |
+| Process Management | ✅ | ✅ |
+| Network Stats | ✅ | ✅ |
+| Port Scanning | ✅ | ✅ |
+| Firewall Control | ✅ pf | ✅ iptables/ufw |
+| Service Management | ✅ launchd | ✅ systemd |
+| Security Audit | ✅ Full | ⚠️ Partial |
+| TUI Dashboard | ✅ | ✅ |
 
 ---
 

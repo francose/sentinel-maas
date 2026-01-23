@@ -13,7 +13,7 @@ AI Assistants (Claude, Copilot, Gemini) are incredibly smart but "blind" and "pa
 
 ---
 
-## Current Status: v1.1.0
+## Current Status: v1.2.0
 
 ### ✅ Completed Features
 
@@ -34,6 +34,13 @@ AI Assistants (Claude, Copilot, Gemini) are incredibly smart but "blind" and "pa
 | **Phase 2** | Homebrew Formula | ✅ Complete | v1.1.0 |
 | **Phase 3** | Webhook Reporting (`--webhook`) | ✅ Complete | v1.1.0 |
 | **Phase 3** | Daemon Mode (`--daemon`) | ✅ Complete | v1.1.0 |
+| **Phase 4** | Top Processes (`--top`) | ✅ Complete | v1.2.0 |
+| **Phase 4** | Port Scanner (`--scan-ports`) | ✅ Complete | v1.2.0 |
+| **Phase 4** | Network Stats (`--network-stats`) | ✅ Complete | v1.2.0 |
+| **Phase 5** | Asset Inventory (`--asset-info`) | ✅ Complete | v1.2.0 |
+| **Phase 5** | Security Audit (`--security-audit`) | ✅ Complete | v1.2.0 |
+| **Phase 5** | Check Updates (`--check-updates`) | ✅ Complete | v1.2.0 |
+| **Phase 5** | Restart Service (`--restart-service`) | ✅ Complete | v1.2.0 |
 | **Tech Debt** | Structured JSON Errors | ✅ Complete | v1.1.0 |
 
 ---
@@ -115,47 +122,37 @@ sudo sentinel --daemon
 
 ## Future Phases
 
-### Phase 4: Advanced Network Tools (NetTools)
+### Phase 4: Advanced Network Tools (NetTools) ✅ PARTIAL
 
 *Goal: Deep network diagnostics and traffic analysis capabilities*
 
-| Feature | Command | Description | Priority |
-|---------|---------|-------------|----------|
-| **Port Scanner** | `--scan-ports <target>` | Scan open ports on local/remote hosts | High |
-| **DNS Lookup** | `--dns <domain>` | Resolve DNS with full record details (A, AAAA, MX, TXT) | High |
-| **Traceroute** | `--traceroute <host>` | Network path analysis with latency | Medium |
-| **Bandwidth Monitor** | `--bandwidth` | Real-time network throughput per interface | High |
-| **Connection Details** | `--conn-details <pid>` | Deep dive into process network activity | Medium |
-| **Packet Capture** | `--pcap <interface>` | Lightweight tcpdump-style capture | Low |
-| **Latency Monitor** | `--ping <hosts>` | Continuous ping with statistics | Medium |
-| **ARP Table** | `--arp` | Show ARP cache with vendor lookup | Medium |
-| **Listening Ports** | `--listeners` | All listening services with process info | High |
-| **Netstat Enhanced** | `--netstat` | Enhanced connection table with geolocation | High |
+| Feature | Command | Description | Status |
+|---------|---------|-------------|--------|
+| **Port Scanner** | `--scan-ports <target>` | Scan open ports on local/remote hosts | ✅ Complete |
+| **Network Stats** | `--network-stats` | Interface bandwidth and connection counts | ✅ Complete |
+| **DNS Lookup** | `--dns <domain>` | Resolve DNS with full record details | 🔜 Planned |
+| **Traceroute** | `--traceroute <host>` | Network path analysis with latency | 🔜 Planned |
+| **Packet Capture** | `--pcap <interface>` | Lightweight tcpdump-style capture | 🔜 Planned |
+| **ARP Table** | `--arp` | Show ARP cache with vendor lookup | 🔜 Planned |
 
 #### Use Cases
-- *"What ports are open on this machine?"* → `--listeners`
-- *"Is there unusual outbound traffic?"* → `--bandwidth`
-- *"Where is this IP located?"* → `--netstat` (with geo)
-- *"Trace the route to api.example.com"* → `--traceroute api.example.com`
+- *"What ports are open on this machine?"* → `--scan-ports localhost`
+- *"Show network bandwidth by interface"* → `--network-stats`
 
 ---
 
-### Phase 5: Asset Metadata & Inventory
+### Phase 5: Asset Metadata & Inventory ✅ COMPLETE
 
 *Goal: Complete system inventory for asset management and compliance*
 
-| Feature | Command | Description | Priority |
-|---------|---------|-------------|----------|
-| **System Info** | `--asset-info` | Full hardware/software inventory | High |
-| **Hardware Details** | `--hardware` | CPU, RAM, disk, serial numbers | High |
-| **Installed Apps** | `--apps` | List all installed applications with versions | High |
-| **Running Services** | `--services` | LaunchDaemons/Agents status | Medium |
-| **User Accounts** | `--users` | Local user enumeration | Medium |
-| **Disk Usage** | `--disk` | Storage breakdown by volume | High |
-| **Network Interfaces** | `--interfaces` | NICs with MAC, IP, status | High |
-| **Security Posture** | `--security-audit` | SIP, Gatekeeper, FileVault status | High |
-| **Certificates** | `--certs` | Installed certificates and expiry | Medium |
-| **Startup Items** | `--startup` | Login items and launch agents | Medium |
+| Feature | Command | Description | Status |
+|---------|---------|-------------|--------|
+| **System Info** | `--asset-info` | Full hardware/software inventory | ✅ Complete |
+| **Top Processes** | `--top` | CPU/memory sorted process list | ✅ Complete |
+| **Running Services** | `--services` | LaunchDaemons/Agents status | ✅ Complete |
+| **Security Posture** | `--security-audit` | SIP, Gatekeeper, FileVault status | ✅ Complete |
+| **Check Updates** | `--check-updates` | macOS update availability | ✅ Complete |
+| **Restart Service** | `--restart-service` | Service management | ✅ Complete |
 
 #### Asset Metadata JSON Schema
 ```json
@@ -221,8 +218,15 @@ sudo sentinel --daemon
 |----------|--------|-------|
 | macOS Intel | ✅ Supported | Primary platform |
 | macOS Apple Silicon | ✅ Supported | Primary platform |
-| Linux | 🔜 Planned | Different thermal/firewall APIs |
+| Linux x86_64 | ✅ Beta | Core monitoring, iptables firewall, systemd |
+| Linux ARM64 | ✅ Beta | Raspberry Pi, AWS Graviton support |
 | Windows | ❓ Considering | Major refactor needed |
+
+#### Linux Support Details (v1.2.0)
+- **Temperature:** Reads from `/sys/class/thermal` or `lm-sensors`
+- **Firewall:** Uses `iptables` for blocking (with ufw fallback)
+- **Services:** Uses `systemctl` for service management
+- **Config:** Same YAML format at `/etc/sentinel/config.yaml`
 
 ### Phase 8: MCP Bridge Enhancements
 
@@ -232,13 +236,13 @@ sudo sentinel --daemon
 | `terminate_process` | Kill by PID | ✅ Available |
 | `block_ip_address` | Firewall block | ✅ Available |
 | `enable_firewall` | Fix disabled FW | ✅ Available |
-| `get_top_processes` | CPU/memory hogs | 🔜 Planned |
-| `restart_service` | Service management | 🔜 Planned |
-| `check_updates` | OS update status | 🔜 Planned |
-| `scan_ports` | Port scanning | 🔜 Phase 4 |
-| `get_asset_info` | Full asset metadata | 🔜 Phase 5 |
-| `get_network_stats` | Bandwidth/connections | 🔜 Phase 4 |
-| `security_audit` | Security posture check | 🔜 Phase 5 |
+| `get_top_processes` | CPU/memory hogs | ✅ Available |
+| `restart_service` | Service management | ✅ Available |
+| `check_updates` | OS update status | ✅ Available |
+| `scan_ports` | Port scanning | ✅ Available |
+| `get_asset_info` | Full asset metadata | ✅ Available |
+| `get_network_stats` | Bandwidth/connections | ✅ Available |
+| `security_audit` | Security posture check | ✅ Available |
 
 ---
 
@@ -294,6 +298,7 @@ sudo sentinel --daemon
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v1.2.0 | 2026-01-23 | Top processes, port scanner, asset info, security audit, network stats, check updates, restart service, **Linux support (beta)** |
 | v1.1.0 | 2026-01-22 | Process killer, IP blocking, config file, webhook/daemon mode |
 | v1.0.0 | 2026-01-15 | Initial release with TUI, JSON output, firewall monitoring |
 

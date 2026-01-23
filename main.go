@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -21,6 +23,8 @@ import (
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
 	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
 	psnet "github.com/shirou/gopsutil/v4/net"
@@ -100,12 +104,225 @@ type BlockResult struct {
 	Fix       string   `json:"fix,omitempty"`
 }
 
+// --- PHASE 4/5: NEW DATA STRUCTURES ---
+
+// TopProcess represents a process in the top list
+type TopProcess struct {
+	PID        int32   `json:"pid"`
+	Name       string  `json:"name"`
+	CPUPercent float64 `json:"cpu_percent"`
+	MemPercent float32 `json:"mem_percent"`
+	MemMB      float64 `json:"mem_mb"`
+	User       string  `json:"user"`
+	Status     string  `json:"status"`
+	Command    string  `json:"command,omitempty"`
+}
+
+// TopProcessResult for --top command
+type TopProcessResult struct {
+	Success   bool         `json:"success"`
+	Action    string       `json:"action"`
+	Timestamp string       `json:"timestamp"`
+	Processes []TopProcess `json:"processes"`
+	Error     string       `json:"error,omitempty"`
+	ErrorCode string       `json:"error_code,omitempty"`
+}
+
+// ServiceInfo for --services command
+type ServiceInfo struct {
+	Name   string `json:"name"`
+	Label  string `json:"label"`
+	Status string `json:"status"`
+	PID    int    `json:"pid,omitempty"`
+	Type   string `json:"type"` // LaunchDaemon, LaunchAgent
+	Path   string `json:"path,omitempty"`
+}
+
+// ServiceResult for service operations
+type ServiceResult struct {
+	Success   bool          `json:"success"`
+	Action    string        `json:"action"`
+	Service   string        `json:"service,omitempty"`
+	Label     string        `json:"label,omitempty"`
+	Message   string        `json:"message,omitempty"`
+	Services  []ServiceInfo `json:"services,omitempty"`
+	Error     string        `json:"error,omitempty"`
+	ErrorCode string        `json:"error_code,omitempty"`
+	Fix       string        `json:"fix,omitempty"`
+}
+
+// UpdateInfo for --check-updates
+type UpdateInfo struct {
+	Available   bool     `json:"updates_available"`
+	Updates     []string `json:"updates,omitempty"`
+	LastChecked string   `json:"last_checked"`
+	OSVersion   string   `json:"os_version"`
+	Error       string   `json:"error,omitempty"`
+}
+
+// UpdateResult for update check
+type UpdateResult struct {
+	Success   bool       `json:"success"`
+	Action    string     `json:"action"`
+	Info      UpdateInfo `json:"info"`
+	Error     string     `json:"error,omitempty"`
+	ErrorCode string     `json:"error_code,omitempty"`
+}
+
+// PortInfo for --scan-ports
+type PortInfo struct {
+	Port     int    `json:"port"`
+	State    string `json:"state"`
+	Service  string `json:"service,omitempty"`
+	Protocol string `json:"protocol"`
+}
+
+// PortScanResult for port scanning
+type PortScanResult struct {
+	Success   bool       `json:"success"`
+	Action    string     `json:"action"`
+	Target    string     `json:"target"`
+	Ports     []PortInfo `json:"ports"`
+	OpenCount int        `json:"open_count"`
+	ScanTime  string     `json:"scan_time_ms"`
+	Error     string     `json:"error,omitempty"`
+	ErrorCode string     `json:"error_code,omitempty"`
+}
+
+// AssetInfo for --asset-info
+type AssetInfo struct {
+	AssetID      string       `json:"asset_id"`
+	Hostname     string       `json:"hostname"`
+	SerialNumber string       `json:"serial_number"`
+	Hardware     HardwareInfo `json:"hardware"`
+	OS           OSInfo       `json:"os"`
+	Network      NetworkInfo  `json:"network"`
+	Security     SecurityInfo `json:"security"`
+	Storage      StorageInfo  `json:"storage"`
+	LastUpdated  string       `json:"last_updated"`
+}
+
+type HardwareInfo struct {
+	Model      string `json:"model"`
+	Chip       string `json:"chip"`
+	Cores      int    `json:"cores"`
+	MemoryGB   uint64 `json:"memory_gb"`
+	MemoryUsed uint64 `json:"memory_used_gb"`
+}
+
+type OSInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Build   string `json:"build"`
+	Kernel  string `json:"kernel"`
+	Uptime  string `json:"uptime"`
+}
+
+type NetworkInfo struct {
+	Interfaces []InterfaceInfo `json:"interfaces"`
+	PublicIP   string          `json:"public_ip,omitempty"`
+}
+
+type InterfaceInfo struct {
+	Name   string   `json:"name"`
+	MAC    string   `json:"mac"`
+	IPs    []string `json:"ips"`
+	Status string   `json:"status"`
+}
+
+type SecurityInfo struct {
+	SIPEnabled bool   `json:"sip_enabled"`
+	Gatekeeper string `json:"gatekeeper"`
+	FileVault  string `json:"filevault"`
+	Firewall   string `json:"firewall"`
+	XProtect   string `json:"xprotect,omitempty"`
+}
+
+type StorageInfo struct {
+	Volumes []VolumeInfo `json:"volumes"`
+}
+
+type VolumeInfo struct {
+	Name       string  `json:"name"`
+	MountPoint string  `json:"mount_point"`
+	TotalGB    float64 `json:"total_gb"`
+	UsedGB     float64 `json:"used_gb"`
+	FreeGB     float64 `json:"free_gb"`
+	UsedPct    float64 `json:"used_percent"`
+}
+
+// AssetResult for asset info
+type AssetResult struct {
+	Success   bool      `json:"success"`
+	Action    string    `json:"action"`
+	Asset     AssetInfo `json:"asset"`
+	Error     string    `json:"error,omitempty"`
+	ErrorCode string    `json:"error_code,omitempty"`
+}
+
+// NetworkStats for --network-stats
+type NetworkStats struct {
+	Interfaces     []InterfaceStats `json:"interfaces"`
+	Connections    ConnectionStats  `json:"connections"`
+	TotalBytesSent uint64           `json:"total_bytes_sent"`
+	TotalBytesRecv uint64           `json:"total_bytes_recv"`
+}
+
+type InterfaceStats struct {
+	Name        string `json:"name"`
+	BytesSent   uint64 `json:"bytes_sent"`
+	BytesRecv   uint64 `json:"bytes_recv"`
+	PacketsSent uint64 `json:"packets_sent"`
+	PacketsRecv uint64 `json:"packets_recv"`
+	Errin       uint64 `json:"errors_in"`
+	Errout      uint64 `json:"errors_out"`
+}
+
+type ConnectionStats struct {
+	Total       int `json:"total"`
+	Established int `json:"established"`
+	Listen      int `json:"listen"`
+	TimeWait    int `json:"time_wait"`
+	CloseWait   int `json:"close_wait"`
+}
+
+// NetworkStatsResult for network stats
+type NetworkStatsResult struct {
+	Success   bool         `json:"success"`
+	Action    string       `json:"action"`
+	Stats     NetworkStats `json:"stats"`
+	Timestamp string       `json:"timestamp"`
+	Error     string       `json:"error,omitempty"`
+	ErrorCode string       `json:"error_code,omitempty"`
+}
+
+// SecurityAuditResult for --security-audit
+type SecurityAuditResult struct {
+	Success       bool         `json:"success"`
+	Action        string       `json:"action"`
+	OverallStatus string       `json:"overall_status"` // SECURE, WARNING, CRITICAL
+	Checks        []AuditCheck `json:"checks"`
+	Score         int          `json:"score"` // 0-100
+	Timestamp     string       `json:"timestamp"`
+	Error         string       `json:"error,omitempty"`
+	ErrorCode     string       `json:"error_code,omitempty"`
+}
+
+type AuditCheck struct {
+	Name        string `json:"name"`
+	Status      string `json:"status"` // PASS, WARN, FAIL
+	Description string `json:"description"`
+	Value       string `json:"value,omitempty"`
+	Fix         string `json:"fix,omitempty"`
+}
+
 const (
-	Version           = "1.1.0"
-	DefaultConfigPath = "/etc/sentinel/config.yaml"
-	SentinelPFAnchor  = "com.sentinel"
-	SentinelPFConf    = "/etc/pf.anchors/com.sentinel"
+	Version = "1.2.0"
 )
+
+// Platform-specific constants are defined in platform_darwin.go and platform_linux.go:
+// - ConfigDir, DefaultConfigPath
+// - SentinelPFAnchor, SentinelPFConf (macOS only)
 
 // --- GLOBAL STATE ---
 var (
@@ -141,6 +358,20 @@ func main() {
 	// PHASE 3: Webhook/Fleet mode
 	webhookURL := flag.String("webhook", "", "Send telemetry to webhook URL (one-shot)")
 	daemonMode := flag.Bool("daemon", false, "Run as daemon, sending telemetry to configured webhook")
+
+	// PHASE 4: Advanced Network Tools
+	topProcs := flag.Bool("top", false, "Show top processes by CPU/memory usage")
+	topCount := flag.Int("top-count", 10, "Number of processes to show (default 10)")
+	scanPorts := flag.String("scan-ports", "", "Scan ports on target (e.g., localhost, 192.168.1.1)")
+	portRange := flag.String("port-range", "1-1024", "Port range to scan (e.g., 1-1024, 80,443,8080)")
+	networkStats := flag.Bool("network-stats", false, "Show network interface statistics")
+
+	// PHASE 5: Asset Metadata & Inventory
+	assetInfo := flag.Bool("asset-info", false, "Show full system asset information")
+	securityAudit := flag.Bool("security-audit", false, "Run security posture audit")
+	listServices := flag.Bool("services", false, "List running services (LaunchDaemons/Agents)")
+	restartSvc := flag.String("restart-service", "", "Restart a launchd service by label")
+	checkUpdates := flag.Bool("check-updates", false, "Check for available macOS updates")
 
 	// Info flags
 	versionFlag := flag.Bool("version", false, "Print version and exit")
@@ -199,6 +430,54 @@ func main() {
 	// PHASE 3: Daemon mode
 	if *daemonMode {
 		runDaemon()
+		return
+	}
+
+	// PHASE 4: Top processes
+	if *topProcs {
+		getTopProcesses(*topCount)
+		return
+	}
+
+	// PHASE 4: Port scanning
+	if *scanPorts != "" {
+		scanPortsOnTarget(*scanPorts, *portRange)
+		return
+	}
+
+	// PHASE 4: Network stats
+	if *networkStats {
+		getNetworkStats()
+		return
+	}
+
+	// PHASE 5: Asset info
+	if *assetInfo {
+		getAssetInfo()
+		return
+	}
+
+	// PHASE 5: Security audit
+	if *securityAudit {
+		runSecurityAudit()
+		return
+	}
+
+	// PHASE 5: Services
+	if *listServices {
+		getServices()
+		return
+	}
+
+	// PHASE 5: Restart service
+	if *restartSvc != "" {
+		restartService(*restartSvc)
+		return
+	}
+
+	// PHASE 5: Check updates
+	if *checkUpdates {
+		checkForUpdates()
 		return
 	}
 
@@ -919,4 +1198,676 @@ func runTUI() {
 func outputJSON(v interface{}) {
 	b, _ := json.Marshal(v)
 	fmt.Println(string(b))
+}
+
+// ============================================================================
+// PHASE 4: TOP PROCESSES
+// ============================================================================
+
+func getTopProcesses(count int) {
+	result := TopProcessResult{
+		Action:    "top_processes",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	procs, err := process.Processes()
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to get processes: %v", err)
+		result.ErrorCode = "PROCESS_ERROR"
+		outputJSON(result)
+		os.Exit(1)
+	}
+
+	var topProcs []TopProcess
+	for _, p := range procs {
+		name, _ := p.Name()
+		cpuPct, _ := p.CPUPercent()
+		memPct, _ := p.MemoryPercent()
+		memInfo, _ := p.MemoryInfo()
+		user, _ := p.Username()
+		status, _ := p.Status()
+		cmdline, _ := p.Cmdline()
+
+		memMB := float64(0)
+		if memInfo != nil {
+			memMB = float64(memInfo.RSS) / 1024 / 1024
+		}
+
+		// Truncate command line
+		if len(cmdline) > 100 {
+			cmdline = cmdline[:100] + "..."
+		}
+
+		topProcs = append(topProcs, TopProcess{
+			PID:        p.Pid,
+			Name:       name,
+			CPUPercent: cpuPct,
+			MemPercent: memPct,
+			MemMB:      memMB,
+			User:       user,
+			Status:     strings.Join(status, ","),
+			Command:    cmdline,
+		})
+	}
+
+	// Sort by CPU usage (descending)
+	sort.Slice(topProcs, func(i, j int) bool {
+		return topProcs[i].CPUPercent > topProcs[j].CPUPercent
+	})
+
+	// Limit to count
+	if len(topProcs) > count {
+		topProcs = topProcs[:count]
+	}
+
+	result.Success = true
+	result.Processes = topProcs
+	outputJSON(result)
+}
+
+// ============================================================================
+// PHASE 4: PORT SCANNING
+// ============================================================================
+
+func scanPortsOnTarget(target string, portRange string) {
+	result := PortScanResult{
+		Action: "scan_ports",
+		Target: target,
+	}
+
+	startTime := time.Now()
+
+	// Parse port range
+	ports := parsePortRange(portRange)
+	if len(ports) == 0 {
+		result.Error = "Invalid port range format. Use: 1-1024 or 80,443,8080"
+		result.ErrorCode = "INVALID_PORT_RANGE"
+		outputJSON(result)
+		os.Exit(1)
+	}
+
+	// Common port services
+	portServices := map[int]string{
+		21: "FTP", 22: "SSH", 23: "Telnet", 25: "SMTP", 53: "DNS",
+		80: "HTTP", 110: "POP3", 143: "IMAP", 443: "HTTPS", 445: "SMB",
+		993: "IMAPS", 995: "POP3S", 3306: "MySQL", 3389: "RDP",
+		5432: "PostgreSQL", 5900: "VNC", 6379: "Redis", 8080: "HTTP-Alt",
+		8443: "HTTPS-Alt", 27017: "MongoDB",
+	}
+
+	var openPorts []PortInfo
+	for _, port := range ports {
+		address := fmt.Sprintf("%s:%d", target, port)
+		conn, err := net.DialTimeout("tcp", address, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			service := portServices[port]
+			if service == "" {
+				service = "unknown"
+			}
+			openPorts = append(openPorts, PortInfo{
+				Port:     port,
+				State:    "open",
+				Service:  service,
+				Protocol: "tcp",
+			})
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	result.Success = true
+	result.Ports = openPorts
+	result.OpenCount = len(openPorts)
+	result.ScanTime = fmt.Sprintf("%d", elapsed.Milliseconds())
+	outputJSON(result)
+}
+
+func parsePortRange(rangeStr string) []int {
+	var ports []int
+
+	// Handle comma-separated list
+	if strings.Contains(rangeStr, ",") {
+		parts := strings.Split(rangeStr, ",")
+		for _, p := range parts {
+			port, err := strconv.Atoi(strings.TrimSpace(p))
+			if err == nil && port > 0 && port <= 65535 {
+				ports = append(ports, port)
+			}
+		}
+		return ports
+	}
+
+	// Handle range (e.g., 1-1024)
+	if strings.Contains(rangeStr, "-") {
+		parts := strings.Split(rangeStr, "-")
+		if len(parts) == 2 {
+			start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+			end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if err1 == nil && err2 == nil && start > 0 && end <= 65535 && start <= end {
+				for p := start; p <= end; p++ {
+					ports = append(ports, p)
+				}
+			}
+		}
+		return ports
+	}
+
+	// Single port
+	port, err := strconv.Atoi(strings.TrimSpace(rangeStr))
+	if err == nil && port > 0 && port <= 65535 {
+		ports = append(ports, port)
+	}
+
+	return ports
+}
+
+// ============================================================================
+// PHASE 4: NETWORK STATS
+// ============================================================================
+
+func getNetworkStats() {
+	result := NetworkStatsResult{
+		Action:    "network_stats",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	// Get interface stats
+	ioCounters, err := psnet.IOCounters(true)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to get network stats: %v", err)
+		result.ErrorCode = "NETWORK_ERROR"
+		outputJSON(result)
+		os.Exit(1)
+	}
+
+	var totalSent, totalRecv uint64
+	var ifaceStats []InterfaceStats
+	for _, io := range ioCounters {
+		ifaceStats = append(ifaceStats, InterfaceStats{
+			Name:        io.Name,
+			BytesSent:   io.BytesSent,
+			BytesRecv:   io.BytesRecv,
+			PacketsSent: io.PacketsSent,
+			PacketsRecv: io.PacketsRecv,
+			Errin:       io.Errin,
+			Errout:      io.Errout,
+		})
+		totalSent += io.BytesSent
+		totalRecv += io.BytesRecv
+	}
+
+	// Get connection stats
+	conns, _ := psnet.Connections("all")
+	connStats := ConnectionStats{Total: len(conns)}
+	for _, c := range conns {
+		switch c.Status {
+		case "ESTABLISHED":
+			connStats.Established++
+		case "LISTEN":
+			connStats.Listen++
+		case "TIME_WAIT":
+			connStats.TimeWait++
+		case "CLOSE_WAIT":
+			connStats.CloseWait++
+		}
+	}
+
+	result.Success = true
+	result.Stats = NetworkStats{
+		Interfaces:     ifaceStats,
+		Connections:    connStats,
+		TotalBytesSent: totalSent,
+		TotalBytesRecv: totalRecv,
+	}
+	outputJSON(result)
+}
+
+// ============================================================================
+// PHASE 5: ASSET INFO
+// ============================================================================
+
+func getAssetInfo() {
+	result := AssetResult{
+		Action: "asset_info",
+	}
+
+	// Hardware info
+	hostInfo, _ := host.Info()
+	cpuInfo, _ := cpu.Info()
+	memInfo, _ := mem.VirtualMemory()
+
+	chipName := runtime.GOARCH
+	if len(cpuInfo) > 0 {
+		chipName = cpuInfo[0].ModelName
+	}
+
+	cores, _ := cpu.Counts(true)
+
+	// Get serial number (macOS specific)
+	serialNumber := "Unknown"
+	if out, err := exec.Command("system_profiler", "SPHardwareDataType").Output(); err == nil {
+		re := regexp.MustCompile(`Serial Number.*:\s*(\S+)`)
+		if m := re.FindStringSubmatch(string(out)); len(m) > 1 {
+			serialNumber = m[1]
+		}
+	}
+
+	// Get model
+	model := "Unknown"
+	if out, err := exec.Command("system_profiler", "SPHardwareDataType").Output(); err == nil {
+		re := regexp.MustCompile(`Model Name:\s*(.+)`)
+		if m := re.FindStringSubmatch(string(out)); len(m) > 1 {
+			model = strings.TrimSpace(m[1])
+		}
+	}
+
+	// Network interfaces
+	interfaces, _ := psnet.Interfaces()
+	var netInterfaces []InterfaceInfo
+	for _, iface := range interfaces {
+		var ips []string
+		for _, addr := range iface.Addrs {
+			ips = append(ips, addr.Addr)
+		}
+		status := "down"
+		for _, f := range iface.Flags {
+			if f == "up" {
+				status = "up"
+				break
+			}
+		}
+		netInterfaces = append(netInterfaces, InterfaceInfo{
+			Name:   iface.Name,
+			MAC:    iface.HardwareAddr,
+			IPs:    ips,
+			Status: status,
+		})
+	}
+
+	// Storage info
+	partitions, _ := disk.Partitions(false)
+	var volumes []VolumeInfo
+	for _, p := range partitions {
+		usage, err := disk.Usage(p.Mountpoint)
+		if err == nil {
+			volumes = append(volumes, VolumeInfo{
+				Name:       p.Device,
+				MountPoint: p.Mountpoint,
+				TotalGB:    float64(usage.Total) / 1024 / 1024 / 1024,
+				UsedGB:     float64(usage.Used) / 1024 / 1024 / 1024,
+				FreeGB:     float64(usage.Free) / 1024 / 1024 / 1024,
+				UsedPct:    usage.UsedPercent,
+			})
+		}
+	}
+
+	// Security info
+	secInfo := getSecurityInfo()
+
+	// Uptime
+	uptime := time.Duration(hostInfo.Uptime) * time.Second
+	uptimeStr := fmt.Sprintf("%dd %dh %dm", int(uptime.Hours())/24, int(uptime.Hours())%24, int(uptime.Minutes())%60)
+
+	result.Success = true
+	result.Asset = AssetInfo{
+		AssetID:      globalConfig.AgentID,
+		Hostname:     hostInfo.Hostname,
+		SerialNumber: serialNumber,
+		Hardware: HardwareInfo{
+			Model:      model,
+			Chip:       chipName,
+			Cores:      cores,
+			MemoryGB:   memInfo.Total / 1024 / 1024 / 1024,
+			MemoryUsed: memInfo.Used / 1024 / 1024 / 1024,
+		},
+		OS: OSInfo{
+			Name:    hostInfo.Platform,
+			Version: hostInfo.PlatformVersion,
+			Build:   hostInfo.KernelVersion,
+			Kernel:  hostInfo.KernelArch,
+			Uptime:  uptimeStr,
+		},
+		Network: NetworkInfo{
+			Interfaces: netInterfaces,
+		},
+		Security: secInfo,
+		Storage: StorageInfo{
+			Volumes: volumes,
+		},
+		LastUpdated: time.Now().Format(time.RFC3339),
+	}
+	outputJSON(result)
+}
+
+func getSecurityInfo() SecurityInfo {
+	info := SecurityInfo{}
+
+	// SIP Status
+	if out, err := exec.Command("csrutil", "status").Output(); err == nil {
+		info.SIPEnabled = strings.Contains(string(out), "enabled")
+	}
+
+	// Gatekeeper
+	if out, err := exec.Command("spctl", "--status").Output(); err == nil {
+		if strings.Contains(string(out), "enabled") {
+			info.Gatekeeper = "enabled"
+		} else {
+			info.Gatekeeper = "disabled"
+		}
+	}
+
+	// FileVault
+	if out, err := exec.Command("fdesetup", "status").Output(); err == nil {
+		if strings.Contains(string(out), "FileVault is On") {
+			info.FileVault = "enabled"
+		} else {
+			info.FileVault = "disabled"
+		}
+	}
+
+	// Firewall
+	if out, err := exec.Command("/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate").Output(); err == nil {
+		if strings.Contains(string(out), "enabled") {
+			info.Firewall = "enabled"
+		} else {
+			info.Firewall = "disabled"
+		}
+	}
+
+	return info
+}
+
+// ============================================================================
+// PHASE 5: SECURITY AUDIT
+// ============================================================================
+
+func runSecurityAudit() {
+	result := SecurityAuditResult{
+		Action:    "security_audit",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	var checks []AuditCheck
+	score := 0
+	maxScore := 0
+
+	// Check 1: SIP
+	maxScore += 20
+	sipCheck := AuditCheck{Name: "System Integrity Protection", Description: "Prevents unauthorized code modifications"}
+	if out, err := exec.Command("csrutil", "status").Output(); err == nil {
+		if strings.Contains(string(out), "enabled") {
+			sipCheck.Status = "PASS"
+			sipCheck.Value = "Enabled"
+			score += 20
+		} else {
+			sipCheck.Status = "FAIL"
+			sipCheck.Value = "Disabled"
+			sipCheck.Fix = "Boot to Recovery Mode and run: csrutil enable"
+		}
+	} else {
+		sipCheck.Status = "WARN"
+		sipCheck.Value = "Unable to check"
+	}
+	checks = append(checks, sipCheck)
+
+	// Check 2: Gatekeeper
+	maxScore += 15
+	gkCheck := AuditCheck{Name: "Gatekeeper", Description: "Verifies downloaded applications"}
+	if out, err := exec.Command("spctl", "--status").Output(); err == nil {
+		if strings.Contains(string(out), "enabled") {
+			gkCheck.Status = "PASS"
+			gkCheck.Value = "Enabled"
+			score += 15
+		} else {
+			gkCheck.Status = "FAIL"
+			gkCheck.Value = "Disabled"
+			gkCheck.Fix = "sudo spctl --master-enable"
+		}
+	}
+	checks = append(checks, gkCheck)
+
+	// Check 3: FileVault
+	maxScore += 20
+	fvCheck := AuditCheck{Name: "FileVault Encryption", Description: "Full disk encryption"}
+	if out, err := exec.Command("fdesetup", "status").Output(); err == nil {
+		if strings.Contains(string(out), "FileVault is On") {
+			fvCheck.Status = "PASS"
+			fvCheck.Value = "Enabled"
+			score += 20
+		} else {
+			fvCheck.Status = "WARN"
+			fvCheck.Value = "Disabled"
+			fvCheck.Fix = "Enable in System Preferences > Security & Privacy > FileVault"
+		}
+	}
+	checks = append(checks, fvCheck)
+
+	// Check 4: Firewall
+	maxScore += 15
+	fwCheck := AuditCheck{Name: "Application Firewall", Description: "Blocks unwanted incoming connections"}
+	if out, err := exec.Command("/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate").Output(); err == nil {
+		if strings.Contains(string(out), "enabled") {
+			fwCheck.Status = "PASS"
+			fwCheck.Value = "Enabled"
+			score += 15
+		} else {
+			fwCheck.Status = "FAIL"
+			fwCheck.Value = "Disabled"
+			fwCheck.Fix = "sudo sentinel --fix-firewall"
+		}
+	}
+	checks = append(checks, fwCheck)
+
+	// Check 5: Automatic Updates
+	maxScore += 10
+	auCheck := AuditCheck{Name: "Automatic Updates", Description: "Keeps system patched"}
+	if out, err := exec.Command("defaults", "read", "/Library/Preferences/com.apple.SoftwareUpdate", "AutomaticCheckEnabled").Output(); err == nil {
+		if strings.TrimSpace(string(out)) == "1" {
+			auCheck.Status = "PASS"
+			auCheck.Value = "Enabled"
+			score += 10
+		} else {
+			auCheck.Status = "WARN"
+			auCheck.Value = "Disabled"
+			auCheck.Fix = "Enable in System Preferences > Software Update"
+		}
+	} else {
+		auCheck.Status = "WARN"
+		auCheck.Value = "Unable to check"
+	}
+	checks = append(checks, auCheck)
+
+	// Check 6: Remote Login (SSH)
+	maxScore += 10
+	sshCheck := AuditCheck{Name: "Remote Login (SSH)", Description: "SSH access to this machine"}
+	if out, err := exec.Command("systemsetup", "-getremotelogin").Output(); err == nil {
+		if strings.Contains(string(out), "Off") {
+			sshCheck.Status = "PASS"
+			sshCheck.Value = "Disabled"
+			score += 10
+		} else {
+			sshCheck.Status = "WARN"
+			sshCheck.Value = "Enabled (potential risk)"
+			sshCheck.Fix = "Disable if not needed: sudo systemsetup -setremotelogin off"
+		}
+	}
+	checks = append(checks, sshCheck)
+
+	// Check 7: Screen Lock
+	maxScore += 10
+	slCheck := AuditCheck{Name: "Screen Lock on Sleep", Description: "Requires password after sleep"}
+	if out, err := exec.Command("defaults", "read", "com.apple.screensaver", "askForPassword").Output(); err == nil {
+		if strings.TrimSpace(string(out)) == "1" {
+			slCheck.Status = "PASS"
+			slCheck.Value = "Enabled"
+			score += 10
+		} else {
+			slCheck.Status = "WARN"
+			slCheck.Value = "Disabled"
+			slCheck.Fix = "Enable in System Preferences > Security & Privacy"
+		}
+	} else {
+		slCheck.Status = "WARN"
+		slCheck.Value = "Unable to check"
+	}
+	checks = append(checks, slCheck)
+
+	// Calculate overall status
+	pct := (score * 100) / maxScore
+	status := "SECURE"
+	if pct < 60 {
+		status = "CRITICAL"
+	} else if pct < 80 {
+		status = "WARNING"
+	}
+
+	result.Success = true
+	result.Checks = checks
+	result.Score = pct
+	result.OverallStatus = status
+	outputJSON(result)
+}
+
+// ============================================================================
+// PHASE 5: SERVICES
+// ============================================================================
+
+func getServices() {
+	result := ServiceResult{
+		Action: "list_services",
+	}
+
+	var services []ServiceInfo
+
+	// Get LaunchDaemons
+	daemonDirs := []string{
+		"/Library/LaunchDaemons",
+		"/System/Library/LaunchDaemons",
+	}
+
+	for _, dir := range daemonDirs {
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f.Name(), ".plist") {
+				label := strings.TrimSuffix(f.Name(), ".plist")
+				status := "unknown"
+				pid := 0
+
+				// Check if running
+				out, err := exec.Command("launchctl", "list", label).Output()
+				if err == nil {
+					status = "loaded"
+					// Try to parse PID
+					lines := strings.Split(string(out), "\n")
+					for _, line := range lines {
+						if strings.Contains(line, "PID") {
+							parts := strings.Fields(line)
+							if len(parts) >= 3 {
+								pid, _ = strconv.Atoi(parts[2])
+							}
+						}
+					}
+				} else {
+					status = "not loaded"
+				}
+
+				services = append(services, ServiceInfo{
+					Name:   f.Name(),
+					Label:  label,
+					Status: status,
+					PID:    pid,
+					Type:   "LaunchDaemon",
+					Path:   filepath.Join(dir, f.Name()),
+				})
+			}
+		}
+	}
+
+	result.Success = true
+	result.Services = services
+	outputJSON(result)
+}
+
+func restartService(label string) {
+	result := ServiceResult{
+		Action:  "restart_service",
+		Service: label,
+	}
+
+	// Stop the service
+	stopCmd := exec.Command("launchctl", "stop", label)
+	if out, err := stopCmd.CombinedOutput(); err != nil {
+		// Service might not be running, that's ok
+		_ = out
+	}
+
+	// Start the service
+	startCmd := exec.Command("launchctl", "start", label)
+	if out, err := startCmd.CombinedOutput(); err != nil {
+		result.Error = fmt.Sprintf("Failed to start service: %v - %s", err, string(out))
+		result.ErrorCode = "SERVICE_START_FAILED"
+		result.Fix = "Check if service exists: launchctl list | grep " + label
+		outputJSON(result)
+		os.Exit(1)
+	}
+
+	result.Success = true
+	outputJSON(result)
+	fmt.Fprintf(os.Stderr, "✅ Service %s restarted\n", label)
+}
+
+// ============================================================================
+// PHASE 5: CHECK UPDATES
+// ============================================================================
+
+func checkForUpdates() {
+	result := UpdateResult{
+		Action: "check_updates",
+	}
+
+	// Get OS version
+	hostInfo, _ := host.Info()
+
+	result.Info.OSVersion = hostInfo.PlatformVersion
+	result.Info.LastChecked = time.Now().Format(time.RFC3339)
+
+	// Run softwareupdate to check for updates
+	cmd := exec.Command("softwareupdate", "--list")
+	out, err := cmd.CombinedOutput()
+
+	if err != nil {
+		// softwareupdate returns exit code 0 even when no updates,
+		// but might fail for other reasons
+		if !strings.Contains(string(out), "No new software available") {
+			result.Error = fmt.Sprintf("Failed to check updates: %v", err)
+			result.ErrorCode = "UPDATE_CHECK_FAILED"
+			outputJSON(result)
+			os.Exit(1)
+		}
+	}
+
+	output := string(out)
+
+	// Parse updates
+	var updates []string
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "* Label:") || strings.HasPrefix(line, "* ") {
+			update := strings.TrimPrefix(line, "* Label:")
+			update = strings.TrimPrefix(update, "* ")
+			update = strings.TrimSpace(update)
+			if update != "" {
+				updates = append(updates, update)
+			}
+		}
+	}
+
+	result.Success = true
+	result.Info.Available = len(updates) > 0
+	result.Info.Updates = updates
+	outputJSON(result)
 }
