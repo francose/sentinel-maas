@@ -1,183 +1,275 @@
+# 🛡️ Sentinel MaaS
 
-# Sentinel MaaS
+### AI-Native Monitoring-as-a-Service Agent
 
-### AI-Native MaaS Agent & Telemetry Dashboard
+**Sentinel** is a local monitoring agent that gives AI assistants "Eyes" and "Hands" on your Mac. It collects deep system telemetry (thermals, network flows, security logs) and enables AI-driven remediation actions like killing runaway processes or blocking malicious IPs.
 
-**Sentinel** is a high-fidelity, low-resource system monitor written in Go. Originally designed to "revive" older Intel-based MacBooks with passive cooling logic, it has evolved into a **Monitoring as a Service (MaaS)** agent.
-
-It combines a real-time Terminal User Interface (TUI) for local debugging with a background "Agent" that serializes deep system telemetry (Network Flows, Security Logs, Thermal Health) into JSON for analysis by LLMs or cloud platforms.
-
----
-
-## Architecture
-
-Sentinel operates as a hybrid **Edge Agent**. It runs locally on the endpoint, collecting data from the kernel, visualizing it for the user, and preparing it for uplink.
-
-```mermaid
-graph TD
-    subgraph "The Sentinel Agent (Edge)"
-        A[Hardware Sensors] -->|Thermals/Load| Core(Engine)
-        B[Network Stack] -->|Zeek Flows| Core
-        C[Security Subsystem] -->|Auth Logs/Firewall| Core
-        Core -->|Visualizes| TUI[Terminal Dashboard]
-        Core -->|Serializes| JSON[sentinel_dump.json]
-    end
-    
-    subgraph "The AI Cloud (Analysis)"
-        JSON -->|Upload| LLM[Gemini / ChatGPT]
-        LLM -->|Diagnosis| Report[Fix Recommendations]
-    end
-
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Sentinel v1.1.0 - The AI's Eyes & Hands                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│  👁️  EYES: CPU, Thermals, Network Flows, Security Logs, Firewall Status │
+│  🤚 HANDS: Kill Processes, Block IPs, Enable Firewall, Fleet Reporting  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Features
 
-### 1. MaaS Telemetry (The "Service")
+### 🔍 Monitoring (The Eyes)
 
-* **Network Flows (Zeek-Lite)**: Tracks active connections in real-time, mapping `Source IP` → `Dest IP` and resolving the specific `Process Name` (e.g., `python3` talking to `142.250.x.x`).
-* **Security Stream**: Live tailing of the `com.apple.securityd` subsystem to catch authentication events and keychain access.
-* **Perimeter Check**: Monitors macOS Firewall status (`pf`) and active USB devices to detect physical tampering.
+| Feature | Description |
+|---------|-------------|
+| **CPU & Thermal** | Real-time load, die temperature with configurable thresholds |
+| **Network Flows** | Zeek-style connection tracking (Process → IP mapping) |
+| **Security Logs** | Live `com.apple.securityd` event stream |
+| **Firewall Status** | Monitors pf and Application Firewall state |
 
-### 2. Hardware Revival (The "TUI")
+### 🛠️ Remediation (The Hands)
 
-* **Passive Thermal Logic**: Specialized for fanless MacBooks (like the 2017 Retina). Alerts with color-coded warnings (Yellow/Red) if CPU Die Temperature exceeds throttling thresholds (88°C+).
-* **Dynamic Load Analysis**: Automatically detects core count (i5/i7/M1) to calculate accurate "Load Pressure," distinguishing between busy work and actual system lag.
+| Feature | Command | Description |
+|---------|---------|-------------|
+| **Kill Process** | `--kill <PID>` | Terminate runaway processes |
+| **Block IP** | `--block-ip <IP>` | Block malicious IPs via pf |
+| **Unblock IP** | `--unblock-ip <IP>` | Remove IP from blocklist |
+| **Fix Firewall** | `--fix-firewall` | Enable macOS Application Firewall |
 
-### 3. AI-Native Diagnostics
+### 📡 Fleet Mode (Remote Reporting)
 
-* **The "Doctor"**: Press **d** to open the diagnostic overlay. It instantly evaluates system health and saves a snapshot.
-* **JSON Export**: Generates `sentinel_dump.json` containing the exact state of the machine. Upload this to an AI agent to get specific debugging steps (e.g., *"Process X is causing disk thrashing"*).
+| Feature | Command | Description |
+|---------|---------|-------------|
+| **Webhook** | `--webhook <URL>` | Send telemetry to endpoint (one-shot) |
+| **Daemon** | `--daemon` | Continuous reporting to configured webhook |
 
 ---
 
 ## Installation
 
-**Prerequisites:**
+### Option A: Download Pre-built Binary (Recommended)
 
-* macOS (Optimized for Ventura+, compatible with Intel & Silicon).
-* **Root Privileges**: Required to access `powermetrics` (thermals), `log stream` (security), and `pfctl` (firewall).
+Download the latest release for your Mac:
 
-### Option A: Build from Source 
+| Platform | Binary | SHA-256 |
+|----------|--------|---------|
+| **Apple Silicon** (M1/M2/M3) | [sentinel-darwin-arm64](dist/sentinel-darwin-arm64) | `e0d2c65b36c36b49d633a1c857679d3a12076f73bf34f6786d3d7959a13dd58b` |
+| **Intel Mac** | [sentinel-darwin-amd64](dist/sentinel-darwin-amd64) | `8d3ee0733d6ac938feb9a2dc331b1f53b510dfdc41ae7fe2b223c94592654a52` |
 
-1. **Clone & Init:**
+```bash
+# For Apple Silicon (M1/M2/M3)
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.1.0/sentinel-darwin-arm64 -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+
+# For Intel Mac
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.1.0/sentinel-darwin-amd64 -o /usr/local/bin/sentinel
+sudo chmod +x /usr/local/bin/sentinel
+```
+
+### Option B: Quick Install Script
+
+```bash
+curl -sfL https://raw.githubusercontent.com/yourusername/sentinel/main/install.sh | sudo sh
+```
+
+### Option C: Build from Source
+
 ```bash
 git clone https://github.com/yourusername/sentinel.git
 cd sentinel
-go mod init sentinel
-go get github.com/gizak/termui/v3
-go get github.com/shirou/gopsutil/v4
-
-```
-
-
-2. **Compile:**
-*We use flags to strip debug info for a smaller, faster binary.*
-```bash
+go mod tidy
 go build -ldflags "-s -w" -o sentinel
-
-```
-
-
-3. **Install Globally:**
-```bash
 sudo mv sentinel /usr/local/bin/
-
 ```
 
-### Option B: Build from Source 
-#### Fast Install
-
-You can install Sentinel with a single command. This script automatically detects your Mac type (Intel vs M1/M2) and downloads the correct binary.
+### Option D: Homebrew (Coming Soon)
 
 ```bash
-curl -sfL https://raw.githubusercontent.com/francose/sentinel-maas/main/install.sh | sudo sh
+brew tap yourusername/sentinel
+brew install sentinel
 ```
 
 ---
 
-## Usage Guide
+## Usage
 
-Run Sentinel with `sudo` to enable full sensor access:
+### TUI Dashboard
 
 ```bash
 sudo sentinel
-
 ```
 
+Interactive terminal dashboard showing real-time system health. Press `q` to quit.
 
-### For M1/M2/M3 Macs:
+### JSON Telemetry (for MCP/AI Integration)
 
-```Bash
-
-sudo curl -L https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-arm64 -o /usr/local/bin/sentinel
-sudo chmod +x /usr/local/bin/sentinel
+```bash
+sudo sentinel --json
 ```
 
-### For Intel Macs:
-
-```Bash
-
-sudo curl -L https://github.com/francose/sentinel-maas/releases/download/v1.0.0/sentinel-amd64 -o /usr/local/bin/sentinel
-sudo chmod +x /usr/local/bin/sentinel
-
+Outputs structured JSON for AI consumption:
+```json
+{
+  "agent_id": "SENTINEL-MacBook",
+  "timestamp": "2026-01-22T10:30:00Z",
+  "threat_level": "LOW",
+  "cpu_load": "1.25",
+  "temperature": "52",
+  "firewall_status": "ACTIVE",
+  "flows": [...]
+}
 ```
 
+### Remediation Commands
 
+```bash
+# Kill a runaway process
+sudo sentinel --kill 12345
 
-### Dashboard Controls
+# Block a suspicious IP
+sudo sentinel --block-ip 192.168.1.100
 
-| Key | Function | Description |
-| --- | --- | --- |
-| **d** | **Doctor Mode** | Opens the diagnostic overlay AND creates the JSON snapshot. |
-| **q** | **Quit** | Gracefully shuts down the agent and releases resources. |
-| **Ctrl+C** | **Force Quit** | Immediate exit. |
+# Unblock an IP
+sudo sentinel --unblock-ip 192.168.1.100
 
-### Interpreting the Interface
+# List all blocked IPs
+sentinel --list-blocked
 
-1. **Top Left (Sparkline):** CPU Activity. If the title says `Load: > 2.0` (on a dual-core), you are experiencing lag.
-2. **Top Right (Thermals):**
-* **Green:** Passive cooling is working (< 75°C).
-* **Red:** System is throttling (> 88°C).
+# Enable firewall
+sudo sentinel --fix-firewall
+```
 
+### Fleet/Webhook Mode
 
-3. **Bottom Left (Flows):** Shows who is talking to the internet. Look for unknown process names connecting to public IPs.
-4. **Bottom Right (Logs):** Real-time security events. Watch for rapid scrolling (brute force attempts).
+```bash
+# One-shot telemetry push
+sudo sentinel --webhook https://your-server.com/api/telemetry
+
+# Daemon mode (uses config file)
+sudo sentinel --daemon
+```
 
 ---
 
-## AI Troubleshooting Workflow
+## Configuration
 
-How to use Sentinel as a "MaaS" tool for debugging:
+Initialize the config file:
 
-1. **The Symptom:** Your laptop feels slow or hot.
-2. **The Capture:** Run `sudo sentinel` and press **d**.
-3. **The Handoff:** Locate `sentinel_dump.json` in your folder.
-4. **The Prompt:** Upload the file to Gemini/ChatGPT with the prompt:
-> *"Act as a Site Reliability Engineer. Analyze this Sentinel telemetry snapshot. Identify the process causing the high load and verify if the network flows look suspicious."*
+```bash
+sudo sentinel --init-config
+```
 
+This creates `/etc/sentinel/config.yaml`:
 
+```yaml
+agent_id: "SENTINEL-MacBook"
+
+thresholds:
+  thermal_warning: 75.0    # Celsius
+  thermal_critical: 88.0   # Celsius
+  cpu_warning: 80.0        # Percent
+  cpu_critical: 95.0       # Percent
+  memory_warning: 80.0     # Percent
+  memory_critical: 95.0    # Percent
+
+webhook:
+  url: "https://your-server.com/api/telemetry"
+  interval_seconds: 60
+  enabled: true
+
+blocked_ips: []
+```
 
 ---
 
-## Common Issues
+## MCP Integration
 
-* **Error:** `panic: interface conversion...`
-* **Fix:** You are likely using an older version of the code. Ensure `ui.NewStyle` has 3 arguments: `(Color, Background, Modifier)`.
+Sentinel is designed to work with the **Model Context Protocol (MCP)**. The `sentinel-mcp` bridge exposes these tools to AI:
 
+| MCP Tool | Sentinel Command | Use Case |
+|----------|------------------|----------|
+| `get_system_health` | `--json` | "What's the system status?" |
+| `terminate_process` | `--kill` | "Kill the runaway ffmpeg process" |
+| `block_ip_address` | `--block-ip` | "Block this suspicious IP" |
+| `enable_firewall` | `--fix-firewall` | "The firewall is disabled, fix it" |
 
-* **"Temp: ??"**:
-* **Fix:** Your Mac model uses a different sensor name. Run `sudo powermetrics -n 1 --samplers thermal` to find your sensor name, then update the Regex in `main.go`.
+---
 
+## All Commands
 
-* **"ERR: Need Sudo"**:
-* **Fix:** Sentinel is a security tool; it needs root access to read the Kernel Firewall and Thermal Sensors. Always run with `sudo`.
+```
+Usage of sentinel:
+  -block-ip string      Block an IP address using pf firewall
+  -config string        Path to config file (default "/etc/sentinel/config.yaml")
+  -daemon               Run as daemon, sending telemetry to configured webhook
+  -fix-firewall         Enable the macOS Application Firewall
+  -init-config          Create default config file
+  -json                 Output JSON telemetry to stdout and exit
+  -kill int             Terminate a process by PID
+  -list-blocked         List all blocked IP addresses
+  -unblock-ip string    Unblock a previously blocked IP address
+  -version              Print version and exit
+  -webhook string       Send telemetry to webhook URL (one-shot)
+```
 
+---
 
+## Structured JSON Output
+
+All commands return structured JSON with error codes for programmatic handling:
+
+```json
+// Success
+{"success":true,"action":"block_ip","ip":"192.168.1.100"}
+
+// Error with fix suggestion
+{
+  "success": false,
+  "action": "kill",
+  "pid": 1234,
+  "error": "Permission denied",
+  "error_code": "PERMISSION_DENIED",
+  "fix": "Run with sudo: sudo sentinel --kill 1234"
+}
+```
+
+### Error Codes
+
+| Code | Meaning |
+|------|---------|
+| `PERMISSION_DENIED` | Needs sudo |
+| `PROCESS_NOT_FOUND` | PID doesn't exist |
+| `INVALID_IP` | Malformed IP address |
+| `ALREADY_BLOCKED` | IP already in blocklist |
+| `NOT_BLOCKED` | IP not in blocklist |
+| `CONFIG_MISSING` | Required config not set |
+
+---
+
+## Requirements
+
+- **macOS** (Ventura+ recommended, Intel & Apple Silicon)
+- **Root privileges** for thermal sensors, firewall, and process control
+- **Go 1.21+** (for building from source)
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `Temp: ??` | Run with `sudo` for thermal sensor access |
+| `ERR: RUN AS SUDO` | Sentinel needs root for `powermetrics` |
+| Permission denied on kill | Use `sudo sentinel --kill <PID>` |
+| Webhook fails | Check network connectivity and URL |
 
 ---
 
 ## License
 
 [MIT License](LICENSE)
+
+---
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features and development status.

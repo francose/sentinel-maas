@@ -5,6 +5,7 @@ go 1.25.6
 require (
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/shirou/gopsutil/v4 v4.25.12
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
