@@ -534,13 +534,19 @@ sentinel-proto/
 | Component | Version | Status | Progress |
 |-----------|---------|--------|----------|
 | sentinel-agent | 1.3.0 | ✅ Released | ████████████ 100% |
-| sentinel-server | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
+| sentinel-server | 0.1.0 | ✅ Released | ████████░░░░ 70% |
 | sentinel-console | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
 | sentinel-proto | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
 
 ### Changelog
 
 #### 2026-01-28
+- Released sentinel-server v0.1.0
+  - HTTP server with /api/v1/ingest endpoint
+  - SQLite storage for events and agents
+  - REST API for agents, events, fleet status
+  - Auto agent online/offline tracking
+  - Tested with sentinel-agent forward mode
 - Released sentinel-agent v1.3.0
 - Added server forwarding mode (`--forward`)
 - Added `--server`, `--agent-id`, `--tags`, `--interval` flags
