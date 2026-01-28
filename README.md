@@ -6,10 +6,11 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Sentinel v1.2.0 - The AI's Eyes & Hands                                 │
+│ Sentinel v1.3.0 - The AI's Eyes & Hands                                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  👁️  EYES: CPU, Thermals, Network Flows, Security Logs, Asset Inventory │
 │  🤚 HANDS: Kill Processes, Block IPs, Port Scan, Security Audit         │
+│  📡 FLEET: Forward telemetry to Sentinel Server                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -45,8 +46,30 @@
 
 | Feature | Command | Description |
 |---------|---------|-------------|
+| **Forward Mode** | `--forward --server <URL>` | Send telemetry to Sentinel Server |
 | **Webhook** | `--webhook <URL>` | Send telemetry to endpoint (one-shot) |
 | **Daemon** | `--daemon` | Continuous reporting to configured webhook |
+
+#### Forward Mode (New in v1.3.0)
+
+```bash
+# Start forwarding to sentinel-server
+sentinel --forward --server https://sentinel-server:8443
+
+# With custom agent ID, tags, and interval
+sentinel --forward --server https://sentinel-server:8443 \
+  --agent-id prod-web-01 \
+  --tags production,webserver,us-east \
+  --interval 60
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--forward` | Enable forward mode | - |
+| `--server` | Sentinel server URL | Required |
+| `--agent-id` | Agent identifier | Auto-generated |
+| `--tags` | Comma-separated tags | - |
+| `--interval` | Forward interval (seconds) | 30 |
 
 ---
 
@@ -65,11 +88,11 @@ Download the latest release for your platform:
 
 ```bash
 # For Apple Silicon (M1/M2/M3)
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-darwin-arm64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-darwin-arm64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 
 # For Intel Mac
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-darwin-amd64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-darwin-amd64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 ```
 
@@ -82,11 +105,11 @@ sudo chmod +x /usr/local/bin/sentinel
 
 ```bash
 # For Linux x86_64
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-linux-amd64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-linux-amd64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 
 # For Linux ARM64 (Raspberry Pi, AWS Graviton, etc.)
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.2.0/sentinel-linux-arm64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-linux-arm64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 ```
 
