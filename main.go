@@ -3,9 +3,12 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -316,8 +319,45 @@ type AuditCheck struct {
 	Fix         string `json:"fix,omitempty"`
 }
 
+// --- PHASE 7: PROCESS INTELLIGENCE (EDR) ---
+
+// ProcessTreeNode represents a process with its children
+type ProcessTreeNode struct {
+	PID         int32             `json:"pid"`
+	PPID        int32             `json:"ppid"`
+	Name        string            `json:"name"`
+	CommandLine string            `json:"command_line"`
+	Executable  string            `json:"executable"`
+	User        string            `json:"user"`
+	CPU         float64           `json:"cpu_percent"`
+	Memory      float32           `json:"memory_percent"`
+	Children    []ProcessTreeNode `json:"children,omitempty"`
+}
+
+// ProcessTreeResult for --process-tree
+type ProcessTreeResult struct {
+	Success    bool              `json:"success"`
+	Action     string            `json:"action"`
+	Timestamp  string            `json:"timestamp"`
+	Tree       []ProcessTreeNode `json:"tree"`
+	TotalProcs int               `json:"total_processes"`
+	Error      string            `json:"error,omitempty"`
+}
+
+// ProcessHashResult for --process-hash
+type ProcessHashResult struct {
+	Success    bool   `json:"success"`
+	Action     string `json:"action"`
+	PID        int32  `json:"pid"`
+	Name       string `json:"name"`
+	Executable string `json:"executable"`
+	Hash       string `json:"hash"`
+	HashType   string `json:"hash_type"`
+	Error      string `json:"error,omitempty"`
+}
+
 const (
-	Version = "1.3.0"
+	Version = "1.4.0"
 )
 
 // Platform-specific constants are defined in platform_darwin.go and platform_linux.go:
@@ -328,25 +368,25 @@ const (
 
 // ForwardConfig holds server forwarding configuration
 type ForwardConfig struct {
-	ServerURL    string
-	AgentID      string
-	Tags         []string
-	Interval     time.Duration
-	BufferSize   int
-	Timeout      time.Duration
+	ServerURL  string
+	AgentID    string
+	Tags       []string
+	Interval   time.Duration
+	BufferSize int
+	Timeout    time.Duration
 }
 
 // ForwardEvent is the envelope sent to sentinel-server
 type ForwardEvent struct {
-	AgentID    string                 `json:"agent_id"`
-	Hostname   string                 `json:"hostname"`
-	OS         string                 `json:"os"`
-	Arch       string                 `json:"arch"`
-	Version    string                 `json:"version"`
-	Tags       []string               `json:"tags,omitempty"`
-	Timestamp  string                 `json:"timestamp"`
-	EventType  string                 `json:"event_type"`
-	Data       map[string]interface{} `json:"data"`
+	AgentID   string                 `json:"agent_id"`
+	Hostname  string                 `json:"hostname"`
+	OS        string                 `json:"os"`
+	Arch      string                 `json:"arch"`
+	Version   string                 `json:"version"`
+	Tags      []string               `json:"tags,omitempty"`
+	Timestamp string                 `json:"timestamp"`
+	EventType string                 `json:"event_type"`
+	Data      map[string]interface{} `json:"data"`
 }
 
 // ForwardBatch is a batch of events sent to server
@@ -421,6 +461,10 @@ func main() {
 	agentTags := flag.String("tags", "", "Comma-separated agent tags (e.g., prod,webserver)")
 	forwardInterval := flag.Int("interval", 30, "Forward interval in seconds (default 30)")
 
+	// PHASE 7: Process Intelligence (EDR)
+	processTree := flag.Bool("process-tree", false, "Show process tree with parent-child relationships")
+	processHash := flag.Int("process-hash", 0, "Get SHA256 hash of process executable by PID")
+
 	// Info flags
 	versionFlag := flag.Bool("version", false, "Print version and exit")
 
@@ -450,6 +494,19 @@ func main() {
 	// Process Killer
 	if *killPID > 0 {
 		killProcess(*killPID)
+		return
+	}
+
+	// PHASE 7: Process Intelligence (EDR)
+	if *processTree {
+		result := getProcessTree()
+		outputJSON(result)
+		return
+	}
+
+	if *processHash > 0 {
+		result := getProcessHash(int32(*processHash))
+		outputJSON(result)
 		return
 	}
 
@@ -1303,14 +1360,14 @@ func collectConnectionData() map[string]interface{} {
 	}
 
 	type connInfo struct {
-		PID      int32  `json:"pid"`
-		Process  string `json:"process"`
-		Protocol string `json:"protocol"`
-		LocalIP  string `json:"local_ip"`
-		LocalPort uint32 `json:"local_port"`
-		RemoteIP string `json:"remote_ip"`
+		PID        int32  `json:"pid"`
+		Process    string `json:"process"`
+		Protocol   string `json:"protocol"`
+		LocalIP    string `json:"local_ip"`
+		LocalPort  uint32 `json:"local_port"`
+		RemoteIP   string `json:"remote_ip"`
 		RemotePort uint32 `json:"remote_port"`
-		Status   string `json:"status"`
+		Status     string `json:"status"`
 	}
 
 	var connList []connInfo
@@ -1594,6 +1651,125 @@ func runTUI() {
 func outputJSON(v interface{}) {
 	b, _ := json.Marshal(v)
 	fmt.Println(string(b))
+}
+
+// ============================================================================
+// PHASE 7: PROCESS INTELLIGENCE (EDR)
+// ============================================================================
+
+// getProcessTree builds a hierarchical process tree
+func getProcessTree() ProcessTreeResult {
+	procs, err := process.Processes()
+	if err != nil {
+		return ProcessTreeResult{
+			Success: false,
+			Action:  "get_process_tree",
+			Error:   err.Error(),
+		}
+	}
+
+	// Build map of PID -> ProcessTreeNode
+	nodeMap := make(map[int32]*ProcessTreeNode)
+	for _, p := range procs {
+		name, _ := p.Name()
+		cmdline, _ := p.Cmdline()
+		exe, _ := p.Exe()
+		user, _ := p.Username()
+		cpu, _ := p.CPUPercent()
+		mem, _ := p.MemoryPercent()
+		ppid, _ := p.Ppid()
+
+		node := &ProcessTreeNode{
+			PID:         p.Pid,
+			PPID:        ppid,
+			Name:        name,
+			CommandLine: cmdline,
+			Executable:  exe,
+			User:        user,
+			CPU:         cpu,
+			Memory:      mem,
+			Children:    []ProcessTreeNode{},
+		}
+		nodeMap[p.Pid] = node
+	}
+
+	// Build tree structure - roots are processes with no parent in map
+	var roots []ProcessTreeNode
+	for pid, node := range nodeMap {
+		if parent, exists := nodeMap[node.PPID]; exists && pid != node.PPID {
+			parent.Children = append(parent.Children, *node)
+		} else {
+			roots = append(roots, *node)
+		}
+	}
+
+	return ProcessTreeResult{
+		Success:    true,
+		Action:     "get_process_tree",
+		Timestamp:  time.Now().Format(time.RFC3339),
+		Tree:       roots,
+		TotalProcs: len(procs),
+	}
+}
+
+// getProcessHash computes SHA256 hash of a process executable
+func getProcessHash(pid int32) ProcessHashResult {
+	p, err := process.NewProcess(pid)
+	if err != nil {
+		return ProcessHashResult{
+			Success: false,
+			Action:  "get_process_hash",
+			PID:     pid,
+			Error:   "Process not found",
+		}
+	}
+
+	name, _ := p.Name()
+	exe, err := p.Exe()
+	if err != nil || exe == "" {
+		return ProcessHashResult{
+			Success: false,
+			Action:  "get_process_hash",
+			PID:     pid,
+			Name:    name,
+			Error:   "Cannot get executable path",
+		}
+	}
+
+	f, err := os.Open(exe)
+	if err != nil {
+		return ProcessHashResult{
+			Success:    false,
+			Action:     "get_process_hash",
+			PID:        pid,
+			Name:       name,
+			Executable: exe,
+			Error:      err.Error(),
+		}
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ProcessHashResult{
+			Success:    false,
+			Action:     "get_process_hash",
+			PID:        pid,
+			Name:       name,
+			Executable: exe,
+			Error:      err.Error(),
+		}
+	}
+
+	return ProcessHashResult{
+		Success:    true,
+		Action:     "get_process_hash",
+		PID:        pid,
+		Name:       name,
+		Executable: exe,
+		Hash:       hex.EncodeToString(h.Sum(nil)),
+		HashType:   "sha256",
+	}
 }
 
 // ============================================================================
