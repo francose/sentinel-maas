@@ -356,8 +356,44 @@ type ProcessHashResult struct {
 	Error      string `json:"error,omitempty"`
 }
 
+// --- SPRINT 2: DNS LOGGING ---
+
+// DNSConnection represents a DNS-related network connection
+type DNSConnection struct {
+	Timestamp   string `json:"timestamp"`
+	PID         int32  `json:"pid"`
+	ProcessName string `json:"process_name"`
+	Executable  string `json:"executable,omitempty"`
+	LocalAddr   string `json:"local_addr"`
+	RemoteAddr  string `json:"remote_addr"`
+	DNSServer   string `json:"dns_server"`
+	Status      string `json:"status"`
+	Protocol    string `json:"protocol"`
+}
+
+// DNSConnectionsResult for --dns-connections
+type DNSConnectionsResult struct {
+	Success     bool            `json:"success"`
+	Action      string          `json:"action"`
+	Timestamp   string          `json:"timestamp"`
+	Connections []DNSConnection `json:"connections"`
+	Count       int             `json:"count"`
+	Error       string          `json:"error,omitempty"`
+}
+
+// DNSLogEntry for continuous DNS logging
+type DNSLogEntry struct {
+	Timestamp   string `json:"timestamp"`
+	PID         int32  `json:"pid"`
+	ProcessName string `json:"process_name"`
+	Executable  string `json:"executable,omitempty"`
+	DNSServer   string `json:"dns_server"`
+	Protocol    string `json:"protocol"`
+	EventType   string `json:"event_type"` // "dns_query", "dns_response"
+}
+
 const (
-	Version = "1.4.0"
+	Version = "1.5.0"
 )
 
 // Platform-specific constants are defined in platform_darwin.go and platform_linux.go:
@@ -465,6 +501,11 @@ func main() {
 	processTree := flag.Bool("process-tree", false, "Show process tree with parent-child relationships")
 	processHash := flag.Int("process-hash", 0, "Get SHA256 hash of process executable by PID")
 
+	// SPRINT 2: DNS Logging
+	dnsConnections := flag.Bool("dns-connections", false, "Show current DNS connections (port 53)")
+	dnsLog := flag.Bool("dns-log", false, "Continuous DNS connection monitoring")
+	dnsInterval := flag.Int("dns-interval", 2, "DNS log polling interval in seconds")
+
 	// Info flags
 	versionFlag := flag.Bool("version", false, "Print version and exit")
 
@@ -507,6 +548,18 @@ func main() {
 	if *processHash > 0 {
 		result := getProcessHash(int32(*processHash))
 		outputJSON(result)
+		return
+	}
+
+	// SPRINT 2: DNS Logging
+	if *dnsConnections {
+		result := getDNSConnections()
+		outputJSON(result)
+		return
+	}
+
+	if *dnsLog {
+		runDNSLog(*dnsInterval)
 		return
 	}
 
@@ -2442,4 +2495,157 @@ func checkForUpdates() {
 	result.Info.Available = len(updates) > 0
 	result.Info.Updates = updates
 	outputJSON(result)
+}
+
+// ============================================================================
+// SPRINT 2: DNS LOGGING FUNCTIONS
+// ============================================================================
+
+// getDNSConnections returns current connections to DNS servers (port 53)
+func getDNSConnections() DNSConnectionsResult {
+	result := DNSConnectionsResult{
+		Success:   true,
+		Action:    "dns_connections",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	// Get all network connections
+	connections, err := psnet.Connections("all")
+	if err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("Failed to get connections: %v", err)
+		return result
+	}
+
+	// Filter for DNS connections (port 53)
+	for _, conn := range connections {
+		// Check if remote port is 53 (DNS) or local port is 53 (DNS server)
+		if conn.Raddr.Port == 53 || conn.Laddr.Port == 53 {
+			dnsConn := DNSConnection{
+				Timestamp:  time.Now().Format(time.RFC3339),
+				PID:        conn.Pid,
+				LocalAddr:  fmt.Sprintf("%s:%d", conn.Laddr.IP, conn.Laddr.Port),
+				RemoteAddr: fmt.Sprintf("%s:%d", conn.Raddr.IP, conn.Raddr.Port),
+				Status:     conn.Status,
+			}
+
+			// Determine DNS server address
+			if conn.Raddr.Port == 53 {
+				dnsConn.DNSServer = conn.Raddr.IP
+			} else {
+				dnsConn.DNSServer = conn.Laddr.IP
+			}
+
+			// Determine protocol
+			switch conn.Type {
+			case syscall.SOCK_STREAM:
+				dnsConn.Protocol = "tcp"
+			case syscall.SOCK_DGRAM:
+				dnsConn.Protocol = "udp"
+			default:
+				dnsConn.Protocol = fmt.Sprintf("type_%d", conn.Type)
+			}
+
+			// Get process info
+			if conn.Pid > 0 {
+				if p, err := process.NewProcess(conn.Pid); err == nil {
+					if name, err := p.Name(); err == nil {
+						dnsConn.ProcessName = name
+					}
+					if exe, err := p.Exe(); err == nil {
+						dnsConn.Executable = exe
+					}
+				}
+			}
+
+			result.Connections = append(result.Connections, dnsConn)
+		}
+	}
+
+	result.Count = len(result.Connections)
+	return result
+}
+
+// runDNSLog runs continuous DNS connection monitoring
+func runDNSLog(interval int) {
+	// Map to track seen connections to avoid duplicates
+	seen := make(map[string]bool)
+
+	fmt.Fprintf(os.Stderr, "Starting DNS connection monitor (interval: %ds). Press Ctrl+C to stop.\n", interval)
+
+	for {
+		connections, err := psnet.Connections("all")
+		if err != nil {
+			entry := DNSLogEntry{
+				Timestamp: time.Now().Format(time.RFC3339),
+				EventType: "error",
+			}
+			outputJSON(entry)
+			time.Sleep(time.Duration(interval) * time.Second)
+			continue
+		}
+
+		for _, conn := range connections {
+			// Check for DNS connections (port 53)
+			if conn.Raddr.Port != 53 && conn.Laddr.Port != 53 {
+				continue
+			}
+
+			// Create unique key for this connection
+			key := fmt.Sprintf("%d-%s:%d-%s:%d",
+				conn.Pid,
+				conn.Laddr.IP, conn.Laddr.Port,
+				conn.Raddr.IP, conn.Raddr.Port)
+
+			// Skip if already seen
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			entry := DNSLogEntry{
+				Timestamp: time.Now().Format(time.RFC3339),
+				PID:       conn.Pid,
+				EventType: "dns_connection",
+			}
+
+			// Determine DNS server
+			if conn.Raddr.Port == 53 {
+				entry.DNSServer = conn.Raddr.IP
+			} else {
+				entry.DNSServer = conn.Laddr.IP
+			}
+
+			// Determine protocol
+			switch conn.Type {
+			case syscall.SOCK_STREAM:
+				entry.Protocol = "tcp"
+			case syscall.SOCK_DGRAM:
+				entry.Protocol = "udp"
+			default:
+				entry.Protocol = fmt.Sprintf("type_%d", conn.Type)
+			}
+
+			// Get process info
+			if conn.Pid > 0 {
+				if p, err := process.NewProcess(conn.Pid); err == nil {
+					if name, err := p.Name(); err == nil {
+						entry.ProcessName = name
+					}
+					if exe, err := p.Exe(); err == nil {
+						entry.Executable = exe
+					}
+				}
+			}
+
+			outputJSON(entry)
+		}
+
+		// Clean up old entries periodically (every 100 iterations)
+		if len(seen) > 10000 {
+			seen = make(map[string]bool)
+		}
+
+		time.Sleep(time.Duration(interval) * time.Second)
+	}
 }
