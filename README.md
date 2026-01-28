@@ -83,8 +83,8 @@ Download the latest release for your platform:
 
 | Platform | Binary | SHA-256 |
 |----------|--------|---------|
-| **Apple Silicon** (M1/M2/M3) | [sentinel-darwin-arm64](dist/sentinel-darwin-arm64) | `6ba90d3a8c7f0c32dd7009a17712127d70526ab1658c083902434c8cce1eab6b` |
-| **Intel Mac** | [sentinel-darwin-amd64](dist/sentinel-darwin-amd64) | `dcd6013dff84793c8567260b3290aee4d8c4b8524116319528aa86e356feda6f` |
+| **Apple Silicon** (M1/M2/M3) | [sentinel-darwin-arm64](dist/sentinel-darwin-arm64) | `6c1359542b71a0450e3985d4e0f7a82e4eb9737a3f0cab86f27c484c0ba1ac76` |
+| **Intel Mac** | [sentinel-darwin-amd64](dist/sentinel-darwin-amd64) | `2da730c8a9de29766ef209cd8e7d101075c15a63460c398a2749c04c401baf92` |
 
 ```bash
 # For Apple Silicon (M1/M2/M3)
@@ -100,8 +100,8 @@ sudo chmod +x /usr/local/bin/sentinel
 
 | Platform | Binary | SHA-256 |
 |----------|--------|---------|
-| **Linux x86_64** | [sentinel-linux-amd64](dist/sentinel-linux-amd64) | `cc1d30ab7b82135206078b2a6ba8344fb72e1eaa12464c27e5eb1899c86a256d` |
-| **Linux ARM64** | [sentinel-linux-arm64](dist/sentinel-linux-arm64) | `c306028c43470b95aa3debcca61c4caf17389759c4741cb442e1275afb3bd060` |
+| **Linux x86_64** | [sentinel-linux-amd64](dist/sentinel-linux-amd64) | `b6bc7b05532b2486036cf923f975f2f8c06ac0dec266c964717bd9c58a62be33` |
+| **Linux ARM64** | [sentinel-linux-arm64](dist/sentinel-linux-arm64) | `dd1e0dc688f114f1f5c39ba4c04aaee1e5f4a76cef8b0ceee956e32b0bbf5736` |
 
 ```bash
 # For Linux x86_64
