@@ -299,6 +299,72 @@ type NetworkStatsResult struct {
 	ErrorCode string       `json:"error_code,omitempty"`
 }
 
+// --- PHASE 4: ADVANCED NET TOOLS (SPRINT 4) ---
+
+// DNSResult for --dns-lookup
+type DNSResult struct {
+	Success   bool        `json:"success"`
+	Action    string      `json:"action"`
+	Domain    string      `json:"domain"`
+	Records   []DNSRecord `json:"records"`
+	Timing    string      `json:"timing_ms"`
+	Error     string      `json:"error,omitempty"`
+}
+
+type DNSRecord struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// TracerouteResult for --traceroute
+type TracerouteResult struct {
+	Success bool            `json:"success"`
+	Action  string          `json:"action"`
+	Target  string          `json:"target"`
+	Hops    []TracerouteHop `json:"hops"`
+	Error   string          `json:"error,omitempty"`
+}
+
+type TracerouteHop struct {
+	Hop     int    `json:"hop"`
+	IP      string `json:"ip"`
+	Host    string `json:"host,omitempty"`
+	Latency string `json:"latency"`
+}
+
+// ARPResult for --arp
+type ARPResult struct {
+	Success bool       `json:"success"`
+	Action  string     `json:"action"`
+	Entries []ARPEntry `json:"entries"`
+	Error   string     `json:"error,omitempty"`
+}
+
+type ARPEntry struct {
+	IP        string `json:"ip"`
+	MAC       string `json:"mac"`
+	Interface string `json:"interface"`
+	Hostname  string `json:"hostname,omitempty"`
+}
+
+// PcapResult for --pcap
+type PcapResult struct {
+	Success   bool         `json:"success"`
+	Action    string       `json:"action"`
+	Interface string       `json:"interface"`
+	Packets   []PcapPacket `json:"packets"`
+	Count     int          `json:"count"`
+	Error     string       `json:"error,omitempty"`
+}
+
+type PcapPacket struct {
+	Timestamp string `json:"timestamp"`
+	Protocol  string `json:"protocol"`
+	Src       string `json:"src"`
+	Dst       string `json:"dst"`
+	Info      string `json:"info"`
+}
+
 // SecurityAuditResult for --security-audit
 type SecurityAuditResult struct {
 	Success       bool         `json:"success"`
@@ -482,6 +548,12 @@ func main() {
 	scanPorts := flag.String("scan-ports", "", "Scan ports on target (e.g., localhost, 192.168.1.1)")
 	portRange := flag.String("port-range", "1-1024", "Port range to scan (e.g., 1-1024, 80,443,8080)")
 	networkStats := flag.Bool("network-stats", false, "Show network interface statistics")
+	// SPRINT 4: Advanced Network Tools
+	dnsLookup := flag.String("dns", "", "Resolve DNS records for domain")
+	traceRoute := flag.String("traceroute", "", "Run traceroute to host")
+	arpTable := flag.Bool("arp", false, "Show ARP table")
+	pcapIface := flag.String("pcap", "", "Capture packets on interface (tcpdump wrapper)")
+	pcapCount := flag.Int("pcap-count", 20, "Number of packets to capture")
 
 	// PHASE 5: Asset Metadata & Inventory
 	assetInfo := flag.Bool("asset-info", false, "Show full system asset information")
@@ -630,6 +702,27 @@ func main() {
 	// PHASE 4: Network stats
 	if *networkStats {
 		getNetworkStats()
+		return
+	}
+
+	// SPRINT 4: Advanced Network Tools
+	if *dnsLookup != "" {
+		runDNSLookup(*dnsLookup)
+		return
+	}
+
+	if *traceRoute != "" {
+		runTraceroute(*traceRoute)
+		return
+	}
+
+	if *arpTable {
+		getARPTable()
+		return
+	}
+
+	if *pcapIface != "" {
+		runPacketCapture(*pcapIface, *pcapCount)
 		return
 	}
 
@@ -1301,7 +1394,39 @@ func collectForwardEvents(cfg ForwardConfig) []ForwardEvent {
 	connEvent.Data = collectConnectionData()
 	events = append(events, connEvent)
 
+	// 4. DNS Logs Event (Sprint 2)
+	dnsEvent := baseEvent
+	dnsEvent.EventType = "dns_logs"
+	dnsEvent.Data = collectDNSData()
+	events = append(events, dnsEvent)
+
+	// 5. Process Tree Event (Sprint 3)
+	// We only send this if explicitly enabled? Or maybe always for Sprint 3 compliance?
+	// For now, let's include it but maybe less frequently in a real world scenario.
+	treeEvent := baseEvent
+	treeEvent.EventType = "process_tree"
+	treeEvent.Data = collectProcessTreeData()
+	events = append(events, treeEvent)
+
 	return events
+}
+
+// collectDNSData gathers current DNS connections
+func collectDNSData() map[string]interface{} {
+	data := make(map[string]interface{})
+	result := getDNSConnections()
+	data["connections"] = result.Connections
+	data["count"] = result.Count
+	return data
+}
+
+// collectProcessTreeData gathers process hierarchy
+func collectProcessTreeData() map[string]interface{} {
+	data := make(map[string]interface{})
+	result := getProcessTree()
+	data["tree"] = result.Tree
+	data["total_processes"] = result.TotalProcs
+	return data
 }
 
 // collectMetricsData gathers CPU, memory, disk, network stats
@@ -2044,6 +2169,259 @@ func getNetworkStats() {
 		TotalBytesSent: totalSent,
 		TotalBytesRecv: totalRecv,
 	}
+	outputJSON(result)
+}
+
+// ============================================================================
+// SPRINT 4: ADVANCED NET TOOLS
+// ============================================================================
+
+func runDNSLookup(domain string) {
+	result := DNSResult{
+		Action: "dns_lookup",
+		Domain: domain,
+	}
+	start := time.Now()
+
+	// A records
+	ips, err := net.LookupIP(domain)
+	if err == nil {
+		for _, ip := range ips {
+			typeStr := "A"
+			if ip.To4() == nil {
+				typeStr = "AAAA"
+			}
+			result.Records = append(result.Records, DNSRecord{Type: typeStr, Value: ip.String()})
+		}
+	}
+
+	// CNAME
+	cname, err := net.LookupCNAME(domain)
+	if err == nil && cname != "" && cname != domain+"." {
+		result.Records = append(result.Records, DNSRecord{Type: "CNAME", Value: cname})
+	}
+
+	// MX
+	mxs, err := net.LookupMX(domain)
+	if err == nil {
+		for _, mx := range mxs {
+			result.Records = append(result.Records, DNSRecord{Type: "MX", Value: fmt.Sprintf("%s %d", mx.Host, mx.Pref)})
+		}
+	}
+
+	// TXT
+	txts, err := net.LookupTXT(domain)
+	if err == nil {
+		for _, txt := range txts {
+			result.Records = append(result.Records, DNSRecord{Type: "TXT", Value: txt})
+		}
+	}
+
+	// NS
+	nss, err := net.LookupNS(domain)
+	if err == nil {
+		for _, ns := range nss {
+			result.Records = append(result.Records, DNSRecord{Type: "NS", Value: ns.Host})
+		}
+	}
+
+	if len(result.Records) == 0 {
+		result.Error = "No records found"
+	} else {
+		result.Success = true
+	}
+
+	result.Timing = fmt.Sprintf("%d", time.Since(start).Milliseconds())
+	outputJSON(result)
+}
+
+func runTraceroute(host string) {
+	result := TracerouteResult{
+		Action: "traceroute",
+		Target: host,
+	}
+
+	// Use system traceroute
+	cmd := exec.Command("traceroute", "-w", "1", "-m", "20", host)
+	if runtime.GOOS == "linux" {
+		cmd = exec.Command("traceroute", "-w", "1", "-m", "20", host)
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		result.Error = err.Error()
+		outputJSON(result)
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		result.Error = "Failed to start traceroute: " + err.Error()
+		outputJSON(result)
+		return
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	var hops []TracerouteHop
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		// Parse line: " 1  192.168.1.1 (192.168.1.1)  4.123 ms  ..."
+		fields := strings.Fields(line)
+		if len(fields) >= 3 {
+			hopNum, err := strconv.Atoi(fields[0])
+			if err == nil {
+				// Very basic parsing
+				hop := TracerouteHop{Hop: hopNum}
+
+				// Find IP/Host
+				// Usually field 1 is host, field 2 is (IP), or field 1 is IP
+				if strings.HasPrefix(fields[2], "(") {
+					hop.Host = fields[1]
+					hop.IP = strings.Trim(fields[2], "()")
+					if len(fields) > 4 {
+						hop.Latency = fields[3] + " " + fields[4] // "1.2 ms"
+					}
+				} else {
+					hop.IP = fields[1]
+					if len(fields) > 3 {
+						hop.Latency = fields[2] + " " + fields[3]
+					}
+				}
+
+				if fields[1] == "*" {
+					hop.IP = "*"
+					hop.Latency = "*"
+				}
+
+				hops = append(hops, hop)
+			}
+		}
+	}
+
+	cmd.Wait() // Don't check error here as traceroute often exits non-zero if destination unreachable
+
+	result.Success = true
+	result.Hops = hops
+	outputJSON(result)
+}
+
+func getARPTable() {
+	result := ARPResult{Action: "arp_table"}
+
+	cmd := exec.Command("arp", "-a")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		result.Error = "Failed to run arp: " + err.Error()
+		outputJSON(result)
+		return
+	}
+
+	var entries []ARPEntry
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		// macOS: ? (192.168.1.1) at 11:22:33:44:55:66 on en0 ifscope [ethernet]
+		// Linux: ? (192.168.1.1) at 11:22:33:44:55:66 [ether] on eth0
+
+		if strings.Contains(line, "(") && strings.Contains(line, ") at ") {
+			parts := strings.Fields(line)
+			entry := ARPEntry{}
+
+			// Extract IP
+			start := strings.Index(line, "(")
+			end := strings.Index(line, ")")
+			if start != -1 && end != -1 {
+				entry.IP = line[start+1 : end]
+				if start > 0 {
+					entry.Hostname = strings.TrimSpace(line[:start])
+					if entry.Hostname == "?" {
+						entry.Hostname = ""
+					}
+				}
+			}
+
+			// Extract MAC - usually after "at"
+			for i, p := range parts {
+				if p == "at" && i+1 < len(parts) {
+					entry.MAC = parts[i+1]
+				}
+				if p == "on" && i+1 < len(parts) {
+					entry.Interface = parts[i+1]
+				}
+			}
+
+			entries = append(entries, entry)
+		}
+	}
+
+	result.Success = true
+	result.Entries = entries
+	outputJSON(result)
+}
+
+func runPacketCapture(iface string, count int) {
+	result := PcapResult{
+		Action:    "pcap",
+		Interface: iface,
+	}
+
+	// Wrapper for tcpdump
+	// tcpdump -i en0 -c 10 -n -e (mac address) or just standard
+	cmd := exec.Command("tcpdump", "-i", iface, "-c", strconv.Itoa(count), "-n")
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		result.Error = err.Error()
+		outputJSON(result)
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		result.Error = "Failed to start tcpdump (do you have sudo?): " + err.Error()
+		outputJSON(result)
+		return
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	var packets []PcapPacket
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) > 2 {
+			pkt := PcapPacket{
+				Timestamp: parts[0],
+				Info:      line,
+			}
+			// Try to parse basic IP src > dst
+			for i, p := range parts {
+				if p == ">" && i > 0 && i+1 < len(parts) {
+					pkt.Src = parts[i-1]
+					pkt.Dst = strings.TrimRight(parts[i+1], ":")
+					// Protocol often before "IP" or implied
+					if len(parts) > 1 {
+						if parts[1] == "IP" {
+							pkt.Protocol = "IPv4"
+						} else if parts[1] == "IP6" {
+							pkt.Protocol = "IPv6"
+						} else {
+							pkt.Protocol = parts[1]
+						}
+					}
+				}
+			}
+			packets = append(packets, pkt)
+		}
+	}
+
+	cmd.Wait()
+
+	result.Success = true
+	result.Packets = packets
+	result.Count = len(packets)
 	outputJSON(result)
 }
 

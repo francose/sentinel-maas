@@ -101,7 +101,7 @@ The Sentinel Agent runs on each monitored endpoint, collecting system metrics, t
 
 **Repository**: `github.com/[org]/sentinel-agent`
 
-### Current Version: 1.2.0
+### Current Version: 1.5.0
 
 ### Features
 
@@ -121,6 +121,13 @@ The Sentinel Agent runs on each monitored endpoint, collecting system metrics, t
 | Security Audit | `--security-audit` | `security_audit` | ✅ |
 | Check Updates | `--check-updates` | `check_updates` | ✅ |
 | Port Scanner | `--scan-ports` | `scan_ports` | ✅ |
+| DNS Lookup | `--dns` | `dns_lookup` | ✅ |
+| Traceroute | `--traceroute` | `traceroute` | ✅ |
+| ARP Table | `--arp` | `arp_table` | ✅ |
+| Packet Capture | `--pcap` | `packet_capture` | ✅ |
+| DNS Connections | `--dns-connections` | `dns_connections` | ✅ |
+| Process Tree | `--process-tree` | `process_tree` | ✅ |
+| Process Hash | `--process-hash` | `process_hash` | ✅ |
 
 #### Actions (Write)
 | Feature | CLI Flag | MCP Tool | Status |
@@ -270,18 +277,28 @@ Central aggregator that receives telemetry from all agents, stores events in a t
 
 **Repository**: `github.com/[org]/sentinel-server`
 
-### Status: 🔲 Planned
+### Status: ✅ Released (v0.3.0)
 
-### Features (Planned)
+### Features
 
-#### Core
-- [ ] Agent registration and heartbeat
-- [ ] Event ingestion API (`POST /api/v1/ingest`)
-- [ ] Configuration distribution (`GET /api/v1/config`)
-- [ ] Time-series storage (SQLite → DuckDB)
+#### Core (Implemented)
+- [x] Agent registration and heartbeat
+- [x] Event ingestion API (`POST /api/v1/ingest`)
+- [x] DNS & Process Event Logging (Sprint 2)
+- [x] Detection Engine & Rule Matching (Sprint 3)
+- [x] IOC Management (Sprint 3)
+- [x] Network Diagnostics Storage (Sprint 4)
+- [x] Configuration distribution (`GET /api/v1/config`)
+- [x] Time-series storage (SQLite)
 - [ ] Event retention and rollup
 
-#### Search & Query
+#### Threat Detection (New in v0.2.0)
+- [x] Real-time Rule Engine (Regex, Substring, IOC)
+- [x] Automated Alert Generation
+- [x] IOC Blocklist Management (IP, Domain, Hash)
+- [x] Threat Hunting API
+
+#### Search & Query (Planned)
 - [ ] Full-text event search
 - [ ] Field-based filtering
 - [ ] Time-range queries
@@ -305,22 +322,22 @@ Central aggregator that receives telemetry from all agents, stores events in a t
 - [ ] Feed ingestion
 - [ ] Threat hunting queries
 
-### API Endpoints (Planned)
+### API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/ingest` | Receive events from agents |
-| GET | `/api/v1/config/{agent_id}` | Return agent config |
-| GET | `/api/v1/agents` | List all agents |
-| GET | `/api/v1/agents/{id}` | Get agent details |
-| POST | `/api/v1/agents/{id}/command` | Send command to agent |
-| GET | `/api/v1/events` | Search events |
-| POST | `/api/v1/alerts` | Create alert rule |
-| GET | `/api/v1/alerts` | List alert rules |
-| GET | `/api/v1/alerts/history` | Get triggered alerts |
-| POST | `/api/v1/iocs` | Add IOC |
-| GET | `/api/v1/iocs` | List IOCs |
-| POST | `/api/v1/hunt` | Threat hunt query |
+| Method | Endpoint | Description | Status |
+|--------|----------|-------------|--------|
+| POST | `/api/v1/ingest` | Receive events from agents | ✅ |
+| GET | `/api/v1/config` | Return agent config | ✅ |
+| GET | `/api/v1/agents` | List all agents | ✅ |
+| GET | `/api/v1/agents/{id}` | Get agent details | ✅ |
+| GET | `/api/v1/events` | Search events | 🚧 |
+| GET | `/api/v1/rules` | List detection rules | ✅ |
+| POST | `/api/v1/rules` | Create detection rule | ✅ |
+| GET | `/api/v1/iocs` | List IOCs | ✅ |
+| POST | `/api/v1/iocs` | Add IOC | ✅ |
+| GET | `/api/v1/alerts` | List triggered alerts | ✅ |
+| GET | `/api/v1/diagnostics` | Query network diagnostics | ✅ |
+| POST | `/api/v1/diagnostics` | Store diagnostic results | ✅ |
 
 ### MCP Tools (Planned)
 
@@ -475,7 +492,7 @@ sentinel-proto/
 ```json
 {
   "name": "sentinel-agent",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "tools": [
     {"name": "system_metrics", "description": "Get CPU, memory, disk, network stats"},
     {"name": "process_list", "description": "List all running processes"},
@@ -491,7 +508,14 @@ sentinel-proto/
     {"name": "list_services", "description": "List system services"},
     {"name": "restart_service", "description": "Restart a service"},
     {"name": "scan_ports", "description": "Scan ports on target"},
-    {"name": "check_updates", "description": "Check for OS updates"}
+    {"name": "check_updates", "description": "Check for OS updates"},
+    {"name": "dns_lookup", "description": "Resolve DNS records for domain"},
+    {"name": "traceroute", "description": "Trace network path to host"},
+    {"name": "arp_table", "description": "Get ARP cache (local devices)"},
+    {"name": "packet_capture", "description": "Capture packets on interface"},
+    {"name": "dns_connections", "description": "Get DNS query connections"},
+    {"name": "process_tree", "description": "Get process hierarchy"},
+    {"name": "process_hash", "description": "Get SHA256 hash of process"}
   ]
 }
 ```
@@ -533,14 +557,35 @@ sentinel-proto/
 
 | Component | Version | Status | Progress |
 |-----------|---------|--------|----------|
-| sentinel-agent | 1.3.0 | ✅ Released | ████████████ 100% |
-| sentinel-server | 0.1.0 | ✅ Released | ████████░░░░ 70% |
+| sentinel-agent | 1.5.0 | ✅ Released | ████████████ 100% |
+| sentinel-mcp | 1.3.0 | ✅ Released | ████████████ 100% |
+| sentinel-server | 0.3.0 | ✅ Released | █████████░░░ 80% |
 | sentinel-console | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
 | sentinel-proto | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
 
 ### Changelog
 
-#### 2026-01-28
+#### 2026-01-28 (Sprint 4 Update)
+- Released sentinel-agent v1.4.0
+  - **DNS Lookup** (`--dns`): Full DNS resolution (A, AAAA, MX, TXT, NS, CNAME)
+  - **Traceroute** (`--traceroute`): Network path analysis with hop latency
+  - **ARP Table** (`--arp`): Local network device discovery
+  - **Packet Capture** (`--pcap`): Lightweight tcpdump-style capture
+- Released sentinel-mcp v1.3.0
+  - Added 7 new tools: dns_lookup, traceroute, arp_table, packet_capture, get_dns_connections, get_process_tree, get_process_hash
+  - Now 21 total MCP tools available
+- Released sentinel-server v0.3.0
+  - Added `network_diagnostics` table for storing DNS/traceroute/ARP/PCAP results
+  - New endpoint: `/api/v1/diagnostics`
+  - Handles diagnostic event types from agents
+
+#### 2026-01-28 (Previous)
+- Released sentinel-server v0.2.0
+  - **Sprint 2 (DNS)**: Log DNS queries/responses, Process events
+  - **Sprint 3 (Detection)**: Added Rule Engine and IOC Matching
+  - New API Endpoints: `/api/v1/rules`, `/api/v1/iocs`
+  - Database support for `dns_events`, `process_events`, `detection_rules`, `alerts`
+  - Real-time threat detection based on IOCs and Regex patterns28
 - Released sentinel-server v0.1.0
   - HTTP server with /api/v1/ingest endpoint
   - SQLite storage for events and agents

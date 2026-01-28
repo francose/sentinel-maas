@@ -844,21 +844,354 @@ sentinel --security-audit
 
 ---
 
-## Future Tools (Planned)
+### 15. `get_dns_connections`
 
-These tools are in the roadmap and should be implemented once the sentinel CLI supports them:
+**Purpose:** Get real-time DNS queries and connections (port 53).
 
-### 15. `dns_lookup` (Phase 4)
+**When AI should use this:**
+- User asks "What domains are being queried?"
+- Investigating suspicious network activity
+- Troubleshooting DNS issues
+
+**Implementation:**
+```bash
+sudo sentinel --dns-connections
+```
+
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {},
+  "required": []
+}
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "action": { "type": "string", "const": "dns_connections" },
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pid": { "type": "integer" },
+          "process": { "type": "string" },
+          "cmdline": { "type": "string" },
+          "local_addr": { "type": "string" },
+          "remote_addr": { "type": "string" },
+          "state": { "type": "string" },
+          "dns_server": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### 16. `get_process_tree`
+
+**Purpose:** Get process hierarchy (parent-child relationships).
+
+**When AI should use this:**
+- User asks "Who started this process?"
+- Malware analysis (finding the root cause)
+- Understanding process dependencies
+
+**Implementation:**
+```bash
+sentinel --process-tree
+```
+
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {},
+  "required": []
+}
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "action": { "type": "string", "const": "process_tree" },
+    "tree": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  }
+}
+```
+
+---
+
+### 17. `get_process_hash`
+
+**Purpose:** Calculate SHA256 hash of a running process executable.
+
+**When AI should use this:**
+- Verifying file integrity
+- Checking against virus total/threat intelligence
+- "Is this process running the official binary?"
+
+**Implementation:**
+```bash
+sudo sentinel --process-hash <pid>
+```
+
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "pid": {
+      "type": "integer",
+      "description": "Process ID to hash"
+    }
+  },
+  "required": ["pid"]
+}
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "action": { "type": "string", "const": "process_hash" },
+    "pid": { "type": "integer" },
+    "name": { "type": "string" },
+    "exe_path": { "type": "string" },
+    "hash": { "type": "string" }
+  }
+}
+```
+
+---
+
+### 18. `dns_lookup`
+
+**Purpose:** Resolve DNS records for a domain (A, AAAA, MX, TXT, NS, CNAME).
+
+**When AI should use this:**
+- User asks "Who hosts this domain?"
+- Investigating suspicious domains
+- Verifying DNS configuration
+
+**Implementation:**
 ```bash
 sentinel --dns <domain>
 ```
-DNS resolution with full record details.
 
-### 16. `traceroute` (Phase 4)
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "description": "Domain name to resolve"
+    }
+  },
+  "required": ["domain"]
+}
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "action": { "type": "string", "const": "dns_lookup" },
+    "domain": { "type": "string" },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "value": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### 19. `traceroute`
+
+**Purpose:** trace network path to a host.
+
+**When AI should use this:**
+- User asks "Where is the connection slowing down?"
+- Mapping network topology
+- Investigating latency
+
+**Implementation:**
 ```bash
 sentinel --traceroute <host>
 ```
-Network path analysis with latency.
+
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "host": {
+      "type": "string",
+      "description": "Destination host or IP"
+    }
+  },
+  "required": ["host"]
+}
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "action": { "type": "string", "const": "traceroute" },
+    "target": { "type": "string" },
+    "hops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "hop": { "type": "integer" },
+          "ip": { "type": "string" },
+          "latency": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### 20. `arp_table`
+
+**Purpose:** Get the ARP cache (local network devices).
+
+**When AI should use this:**
+- User asks "What devices are on my local network?"
+- Investigating network switching/routing
+- Identifying MAC addresses
+
+**Implementation:**
+```bash
+sentinel --arp
+```
+
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {},
+  "required": []
+}
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "action": { "type": "string", "const": "arp_table" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ip": { "type": "string" },
+          "mac": { "type": "string" },
+          "interface": { "type": "string" },
+          "hostname": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+### 21. `packet_capture`
+
+**Purpose:** Capture a small sample of network packets.
+
+**When AI should use this:**
+- Deep packet inspection needed
+- "Show me what traffic is on interface en0"
+- Debugging protocol issues
+
+**Implementation:**
+```bash
+sudo sentinel --pcap <interface> --pcap-count <count>
+```
+
+**Input Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "interface": {
+      "type": "string",
+      "description": "Network interface (e.g., en0, eth0)"
+    },
+    "count": {
+      "type": "integer",
+      "description": "Number of packets to capture (default 20)",
+      "default": 20
+    }
+  },
+  "required": ["interface"]
+}
+```
+
+**Output Schema:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "success": { "type": "boolean" },
+    "action": { "type": "string", "const": "pcap" },
+    "interface": { "type": "string" },
+    "packets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": { "type": "string" },
+          "protocol": { "type": "string" },
+          "src": { "type": "string" },
+          "dst": { "type": "string" },
+          "info": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+## Future Tools (Planned)
 
 ---
 
@@ -975,6 +1308,13 @@ These descriptions should be included in the MCP tool registration so the AI und
 | `get_asset_info` | Get complete system hardware/software inventory. Use when user asks about specs or for asset tracking. |
 | `get_network_stats` | Get network interface statistics and connection counts. Use for bandwidth monitoring or network troubleshooting. |
 | `security_audit` | Run a security posture assessment. Use when user asks "Is my system secure?" or for compliance checks. |
+| `get_dns_connections` | Get active DNS connections and queries. Use to identify what domains are being accessed or for network forensics. |
+| `get_process_tree` | Get the process hierarchy tree. Use to trace process ancestry (who started what). |
+| `get_process_hash` | Get the SHA256 hash of a process executable. Use to verify the integrity of a running program (EDR function). |
+| `dns_lookup` | Resolve DNS records for a domain (A, AAAA, MX, TXT, NS, CNAME). Use when user asks "Who hosts this domain?" or investigating suspicious domains. |
+| `traceroute` | Trace network path to a host showing each hop and latency. Use when diagnosing network slowness or mapping topology. |
+| `arp_table` | Get the ARP cache showing local network devices (IP/MAC mappings). Use when user asks "What devices are on my network?" |
+| `packet_capture` | Capture network packets on an interface. Use for deep packet inspection or traffic analysis. Requires sudo. |
 
 ---
 
@@ -1024,6 +1364,13 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"terminate_
 | `get_asset_info` | `--asset-info` | No | Inventory | All |
 | `get_network_stats` | `--network-stats` | No | Monitoring | All |
 | `security_audit` | `--security-audit` | No | Security | All |
+| `get_dns_connections` | `--dns-connections` | Yes | Monitoring | All |
+| `get_process_tree` | `--process-tree` | No | Monitoring | All |
+| `get_process_hash` | `--process-hash <pid>` | Yes | Security | All |
+| `dns_lookup` | `--dns <domain>` | No | Network | All |
+| `traceroute` | `--traceroute <host>` | No | Network | All |
+| `arp_table` | `--arp` | No | Network | All |
+| `packet_capture` | `--pcap <interface>` | Yes | Network | All |
 
 ---
 

@@ -13,7 +13,7 @@ AI Assistants (Claude, Copilot, Gemini) are incredibly smart but "blind" and "pa
 
 ---
 
-## Current Status: v1.2.0
+## Current Status: v1.5.0
 
 ### ✅ Completed Features
 
@@ -41,6 +41,14 @@ AI Assistants (Claude, Copilot, Gemini) are incredibly smart but "blind" and "pa
 | **Phase 5** | Security Audit (`--security-audit`) | ✅ Complete | v1.2.0 |
 | **Phase 5** | Check Updates (`--check-updates`) | ✅ Complete | v1.2.0 |
 | **Phase 5** | Restart Service (`--restart-service`) | ✅ Complete | v1.2.0 |
+| **Phase 6** | Server Forwarding (`--forward`) | ✅ Complete | v1.3.0 |
+| **Phase 6** | DNS Logging (`--dns-connections`) | ✅ Complete | v1.3.0 |
+| **Phase 7** | Process Tree (`--process-tree`) | ✅ Complete | v1.3.0 |
+| **Phase 7** | Process Hash (`--process-hash`) | ✅ Complete | v1.3.0 |
+| **Phase 8** | DNS Lookup (`--dns`) | ✅ Complete | v1.4.0 |
+| **Phase 8** | Traceroute (`--traceroute`) | ✅ Complete | v1.4.0 |
+| **Phase 8** | ARP Table (`--arp`) | ✅ Complete | v1.4.0 |
+| **Phase 8** | Packet Capture (`--pcap`) | ✅ Complete | v1.4.0 |
 | **Tech Debt** | Structured JSON Errors | ✅ Complete | v1.1.0 |
 
 ---
@@ -122,7 +130,7 @@ sudo sentinel --daemon
 
 ## Future Phases
 
-### Phase 4: Advanced Network Tools (NetTools) ✅ PARTIAL
+### Phase 4: Advanced Network Tools (NetTools) ✅ COMPLETE
 
 *Goal: Deep network diagnostics and traffic analysis capabilities*
 
@@ -130,14 +138,16 @@ sudo sentinel --daemon
 |---------|---------|-------------|--------|
 | **Port Scanner** | `--scan-ports <target>` | Scan open ports on local/remote hosts | ✅ Complete |
 | **Network Stats** | `--network-stats` | Interface bandwidth and connection counts | ✅ Complete |
-| **DNS Lookup** | `--dns <domain>` | Resolve DNS with full record details | 🔜 Planned |
-| **Traceroute** | `--traceroute <host>` | Network path analysis with latency | 🔜 Planned |
-| **Packet Capture** | `--pcap <interface>` | Lightweight tcpdump-style capture | 🔜 Planned |
-| **ARP Table** | `--arp` | Show ARP cache with vendor lookup | 🔜 Planned |
+| **DNS Lookup** | `--dns <domain>` | Resolve DNS with full record details (A, AAAA, MX, TXT, NS, CNAME) | ✅ Complete |
+| **Traceroute** | `--traceroute <host>` | Network path analysis with hop latency | ✅ Complete |
+| **Packet Capture** | `--pcap <interface>` | Lightweight tcpdump-style capture (requires sudo) | ✅ Complete |
+| **ARP Table** | `--arp` | Show ARP cache with IP/MAC/interface mapping | ✅ Complete |
 
 #### Use Cases
 - *"What ports are open on this machine?"* → `--scan-ports localhost`
 - *"Show network bandwidth by interface"* → `--network-stats`
+- *"Trace path to google.com"* → `--traceroute google.com`
+- *"Capture 10 packets on en0"* → `--pcap en0 --pcap-count 10`
 
 ---
 
@@ -243,6 +253,13 @@ sudo sentinel --daemon
 | `get_asset_info` | Full asset metadata | ✅ Available |
 | `get_network_stats` | Bandwidth/connections | ✅ Available |
 | `security_audit` | Security posture check | ✅ Available |
+| `get_dns_connections` | DNS query tracking | ✅ Available |
+| `get_process_tree` | Process hierarchy | ✅ Available |
+| `get_process_hash` | Executable hash (SHA256) | ✅ Available |
+| `dns_lookup` | DNS resolution | ✅ Available |
+| `traceroute` | Network path tracing | ✅ Available |
+| `arp_table` | Local network devices | ✅ Available |
+| `packet_capture` | Traffic capture | ✅ Available |
 
 ---
 
@@ -298,6 +315,8 @@ sudo sentinel --daemon
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v1.5.0 | 2026-01-28 | **Sprint 4 Network Tools**: DNS Lookup (`--dns`), Traceroute (`--traceroute`), ARP Table (`--arp`), Packet Capture (`--pcap`). MCP Bridge v1.3.0, Server v0.3.0 compatibility |
+| v1.3.0 | 2026-01-28 | Server forwarding (`--forward`), DNS monitoring (`--dns-connections`), Process Tree & Hashing, **Sentinel Server v0.2.0 compatibility** |
 | v1.2.0 | 2026-01-23 | Top processes, port scanner, asset info, security audit, network stats, check updates, restart service, **Linux support (beta)** |
 | v1.1.0 | 2026-01-22 | Process killer, IP blocking, config file, webhook/daemon mode |
 | v1.0.0 | 2026-01-15 | Initial release with TUI, JSON output, firewall monitoring |

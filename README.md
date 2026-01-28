@@ -6,11 +6,11 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ Sentinel v1.3.0 - The AI's Eyes & Hands                                 │
+│ Sentinel v1.5.0 - The AI's Eyes & Hands                                 │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  👁️  EYES: CPU, Thermals, Network Flows, Security Logs, Asset Inventory │
-│  🤚 HANDS: Kill Processes, Block IPs, Port Scan, Security Audit         │
-│  📡 FLEET: Forward telemetry to Sentinel Server                          │
+│  👁️  EYES: CPU, Thermals, Network Flows, DNS, ARP, Security Logs        │
+│  🤚 HANDS: Kill Processes, Block IPs, Port Scan, Traceroute, PCAP       │
+│  📡 FLEET: Forward telemetry to Sentinel Server (v0.3.0)                │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -25,6 +25,13 @@
 | **CPU & Thermal** | Real-time load, die temperature with configurable thresholds |
 | **Network Flows** | Zeek-style connection tracking (Process → IP mapping) |
 | **Security Logs** | Live `com.apple.securityd` event stream |
+| **DNS Monitoring** | Real-time DNS query logging & connection tracking |
+| **DNS Lookup** | Full DNS resolution (A, AAAA, MX, TXT, NS, CNAME) |
+| **Traceroute** | Network path analysis with hop latency |
+| **ARP Table** | Local network device discovery (IP/MAC mapping) |
+| **Packet Capture** | Lightweight tcpdump-style traffic capture |
+| **Process Tree** | Process hierarchy (parent-child) relationships |
+| **Process Hash** | SHA256 hash verification for running processes |
 | **Firewall Status** | Monitors pf and Application Firewall state |
 | **Top Processes** | CPU/memory sorted process list |
 | **Asset Inventory** | Full system hardware/software inventory |
@@ -40,6 +47,10 @@
 | **Fix Firewall** | `--fix-firewall` | Enable macOS Application Firewall |
 | **Restart Service** | `--restart-service <label>` | Restart launchd services |
 | **Port Scanner** | `--scan-ports <target>` | Scan for open ports |
+| **DNS Lookup** | `--dns <domain>` | Resolve DNS records |
+| **Traceroute** | `--traceroute <host>` | Trace network path |
+| **ARP Table** | `--arp` | Show local network devices |
+| **Packet Capture** | `--pcap <interface>` | Capture network packets |
 | **Security Audit** | `--security-audit` | Security posture assessment |
 
 ### 📡 Fleet Mode (Remote Reporting)
@@ -83,16 +94,16 @@ Download the latest release for your platform:
 
 | Platform | Binary | SHA-256 |
 |----------|--------|---------|
-| **Apple Silicon** (M1/M2/M3) | [sentinel-darwin-arm64](dist/sentinel-darwin-arm64) | `6c1359542b71a0450e3985d4e0f7a82e4eb9737a3f0cab86f27c484c0ba1ac76` |
-| **Intel Mac** | [sentinel-darwin-amd64](dist/sentinel-darwin-amd64) | `2da730c8a9de29766ef209cd8e7d101075c15a63460c398a2749c04c401baf92` |
+| **Apple Silicon** (M1/M2/M3) | [sentinel-darwin-arm64](dist/sentinel-darwin-arm64) | `2fa77fbb54b9f292a9fb90980b6928a4594fba2b141f395ce5fa2b9d392ae49d` |
+| **Intel Mac** | [sentinel-darwin-amd64](dist/sentinel-darwin-amd64) | `f61c4c39d33ef4b975111cbba98dec3ff045796e03e1fba75a730695b4955102` |
 
 ```bash
 # For Apple Silicon (M1/M2/M3)
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-darwin-arm64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.5.0/sentinel-darwin-arm64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 
 # For Intel Mac
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-darwin-amd64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.5.0/sentinel-darwin-amd64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 ```
 
@@ -100,16 +111,16 @@ sudo chmod +x /usr/local/bin/sentinel
 
 | Platform | Binary | SHA-256 |
 |----------|--------|---------|
-| **Linux x86_64** | [sentinel-linux-amd64](dist/sentinel-linux-amd64) | `b6bc7b05532b2486036cf923f975f2f8c06ac0dec266c964717bd9c58a62be33` |
-| **Linux ARM64** | [sentinel-linux-arm64](dist/sentinel-linux-arm64) | `dd1e0dc688f114f1f5c39ba4c04aaee1e5f4a76cef8b0ceee956e32b0bbf5736` |
+| **Linux x86_64** | [sentinel-linux-amd64](dist/sentinel-linux-amd64) | `5f281c1ee067aa00689e8473dd9c56740cac4be29682668bd1dda6ffc5e73e05` |
+| **Linux ARM64** | [sentinel-linux-arm64](dist/sentinel-linux-arm64) | `8d8095d487e13a93abd11aead4e62a725379eadf47b987cdced8fecd64e51c61` |
 
 ```bash
 # For Linux x86_64
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-linux-amd64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.5.0/sentinel-linux-amd64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 
 # For Linux ARM64 (Raspberry Pi, AWS Graviton, etc.)
-sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.3.0/sentinel-linux-arm64 -o /usr/local/bin/sentinel
+sudo curl -L https://github.com/yourusername/sentinel/releases/download/v1.5.0/sentinel-linux-arm64 -o /usr/local/bin/sentinel
 sudo chmod +x /usr/local/bin/sentinel
 ```
 
@@ -216,6 +227,22 @@ sentinel --check-updates
 sentinel --services
 ```
 
+### Network Diagnostic Commands
+
+```bash
+# DNS lookup with full records
+sentinel --dns google.com
+
+# Trace route to host
+sentinel --traceroute 8.8.8.8
+
+# Show ARP table (local network devices)
+sentinel --arp
+
+# Capture packets on interface (requires sudo)
+sudo sentinel --pcap en0 --pcap-count 20
+```
+
 ### Fleet/Webhook Mode
 
 ```bash
@@ -276,6 +303,10 @@ Sentinel is designed to work with the **Model Context Protocol (MCP)**. The `sen
 | `get_network_stats` | `--network-stats` | "Show network bandwidth" |
 | `security_audit` | `--security-audit` | "Is this system secure?" |
 | `check_updates` | `--check-updates` | "Are there OS updates?" |
+| `dns_lookup` | `--dns` | "Who hosts this domain?" |
+| `traceroute` | `--traceroute` | "Where is latency occurring?" |
+| `arp_table` | `--arp` | "What devices are on my network?" |
+| `packet_capture` | `--pcap` | "Capture traffic on en0" |
 
 See [MCP_SPECIFICATION.md](MCP_SPECIFICATION.md) for complete MCP tool definitions.
 
@@ -290,6 +321,9 @@ Usage of sentinel:
   -check-updates        Check for available macOS updates
   -config string        Path to config file (default "/etc/sentinel/config.yaml")
   -daemon               Run as daemon, sending telemetry to configured webhook
+  -dns-connections      Show current DNS connections (port 53)
+  -dns-interval int     DNS log polling interval in seconds (default 2)
+  -dns-log              Continuous DNS connection monitoring
   -fix-firewall         Enable the macOS Application Firewall
   -init-config          Create default config file
   -json                 Output JSON telemetry to stdout and exit
@@ -297,8 +331,15 @@ Usage of sentinel:
   -list-blocked         List all blocked IP addresses
   -network-stats        Show network interface statistics
   -port-range string    Port range to scan (default "1-1024")
+  -process-hash int     Get SHA256 hash of process executable by PID
+  -process-tree         Show process tree with parent-child relationships
   -restart-service      Restart a launchd service by label
   -scan-ports string    Scan ports on target (e.g., localhost, 192.168.1.1)
+  -dns string           DNS lookup for a domain (A, AAAA, MX, TXT, NS, CNAME)
+  -traceroute string    Trace network path to host
+  -arp                  Show ARP table (local network devices)
+  -pcap string          Capture packets on interface (requires sudo)
+  -pcap-count int       Number of packets to capture (default 20)
   -security-audit       Run security posture audit
   -services             List running services (LaunchDaemons/Agents)
   -top                  Show top processes by CPU/memory usage

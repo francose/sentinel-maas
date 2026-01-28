@@ -42,3 +42,4 @@ bin/
 
 # Internal testing scripts
 stress_test.py
+sentinel.db
