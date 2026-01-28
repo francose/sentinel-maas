@@ -34,6 +34,7 @@ go.work.sum
 # Build artifacts - binaries published via GitHub Releases
 sentinel
 dist/
+bin/
 
 # Debug/test outputs
 *.json
