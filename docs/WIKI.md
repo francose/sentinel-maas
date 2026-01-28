@@ -1,0 +1,551 @@
+# Sentinel Platform Wiki
+
+> **AI-Native Security Monitoring Platform**
+> 
+> A complete security monitoring stack with MCP (Model Context Protocol) integration for AI-assisted operations.
+
+---
+
+## Table of Contents
+
+1. [Platform Overview](#platform-overview)
+2. [Architecture](#architecture)
+3. [Repositories](#repositories)
+4. [Sentinel Agent](#sentinel-agent)
+5. [Sentinel Server](#sentinel-server)
+6. [Sentinel Console](#sentinel-console)
+7. [Sentinel Proto](#sentinel-proto)
+8. [MCP Specifications](#mcp-specifications)
+9. [Development Progress](#development-progress)
+
+---
+
+## Platform Overview
+
+Sentinel is a self-contained security monitoring platform designed for:
+
+- **Endpoint Monitoring**: Real-time metrics, process tracking, network connections
+- **Fleet Management**: Centralized visibility across all endpoints
+- **Threat Detection**: IOC matching, alert rules, anomaly detection
+- **AI Integration**: Full MCP support for AI-assisted security operations
+- **Incident Response**: Remote actions (block, isolate, kill, restart)
+
+### Design Principles
+
+1. **Zero External Dependencies**: No Splunk, no Elastic, no third-party SIEM required
+2. **AI-Native**: Built from ground up with MCP for AI assistant integration
+3. **Lightweight**: Minimal resource footprint on endpoints
+4. **Cross-Platform**: macOS and Linux support (Windows planned)
+5. **Open Source**: MIT licensed
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          SENTINEL PLATFORM                                    │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────┐   │
+│  │ SENTINEL AGENT  │    │ SENTINEL SERVER │    │   SENTINEL CONSOLE      │   │
+│  │    (endpoint)   │───▶│  (aggregator)   │◀───│      (web UI)           │   │
+│  ├─────────────────┤    ├─────────────────┤    └─────────────────────────┘   │
+│  │   MCP Server    │    │   MCP Server    │                                  │
+│  │  (local ops)    │    │  (fleet ops)    │◀─── AI Assistants (Claude, etc) │
+│  └─────────────────┘    └─────────────────┘                                  │
+│           │                     │                                            │
+│           │                     ▼                                            │
+│           │            ┌─────────────────┐                                   │
+│           │            │ SENTINEL STORE  │                                   │
+│           └───────────▶│  (time-series)  │                                   │
+│              forward   └─────────────────┘                                   │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Flow
+
+```
+Agent (interval)                     Server                         Store
+     │                                  │                             │
+     │──── POST /api/v1/ingest ────────▶│                             │
+     │     {metrics, events, flows}     │──── INSERT ────────────────▶│
+     │                                  │                             │
+     │◀─── GET /api/v1/config ──────────│     (indexed by time,       │
+     │     {rules, iocs, commands}      │      host, event_type)      │
+     │                                  │                             │
+                                        │◀─── QUERY ──────────────────│
+                              Console ──┤     (search, aggregate)     │
+                                        │                             │
+```
+
+---
+
+## Repositories
+
+| Repository | Description | Status | Language |
+|------------|-------------|--------|----------|
+| [sentinel-agent](#sentinel-agent) | Endpoint monitoring agent | ✅ v1.2.0 | Go |
+| [sentinel-server](#sentinel-server) | Central aggregator & API | 🔲 Planned | Go |
+| [sentinel-console](#sentinel-console) | Web dashboard | 🔲 Planned | Go + HTMX |
+| [sentinel-proto](#sentinel-proto) | Shared types & schemas | 🔲 Planned | Go |
+
+---
+
+## Sentinel Agent
+
+### Overview
+
+The Sentinel Agent runs on each monitored endpoint, collecting system metrics, tracking processes and network connections, and exposing local operations via CLI and MCP.
+
+**Repository**: `github.com/[org]/sentinel-agent`
+
+### Current Version: 1.2.0
+
+### Features
+
+#### Monitoring (Read-Only)
+| Feature | CLI Flag | MCP Tool | Status |
+|---------|----------|----------|--------|
+| System Metrics | `--metrics` | `system_metrics` | ✅ |
+| Process List | `--processes` | `process_list` | ✅ |
+| Top Processes | `--top` | `top_processes` | ✅ |
+| Network Connections | `--connections` | `network_connections` | ✅ |
+| Disk Usage | `--disk` | `disk_usage` | ✅ |
+| Temperature | `--temp` | `temperature` | ✅ |
+| Uptime | `--uptime` | `uptime` | ✅ |
+| Services List | `--services` | `list_services` | ✅ |
+| Asset Info | `--asset-info` | `asset_info` | ✅ |
+| Network Stats | `--network-stats` | `network_stats` | ✅ |
+| Security Audit | `--security-audit` | `security_audit` | ✅ |
+| Check Updates | `--check-updates` | `check_updates` | ✅ |
+| Port Scanner | `--scan-ports` | `scan_ports` | ✅ |
+
+#### Actions (Write)
+| Feature | CLI Flag | MCP Tool | Status |
+|---------|----------|----------|--------|
+| Block IP | `--block-ip` | `block_ip` | ✅ |
+| Unblock IP | `--unblock-ip` | `unblock_ip` | ✅ |
+| Restart Service | `--restart-service` | `restart_service` | ✅ |
+
+#### Interface Modes
+| Mode | Flag | Status |
+|------|------|--------|
+| JSON Output | `--json` | ✅ |
+| TUI Dashboard | `--tui` | ✅ |
+| Watch Mode | `--watch` | ✅ |
+| MCP Server | `--mcp` | ✅ |
+
+### Platform Support
+
+| Platform | Architecture | Status |
+|----------|--------------|--------|
+| macOS | amd64 | ✅ |
+| macOS | arm64 | ✅ |
+| Linux | amd64 | ✅ |
+| Linux | arm64 | ✅ |
+| Windows | amd64 | 🔲 Planned |
+
+### Platform-Specific Implementations
+
+| Feature | macOS | Linux |
+|---------|-------|-------|
+| Temperature | `powermetrics` | `/sys/class/thermal` + `lm-sensors` |
+| Firewall | `pf` (pfctl) | `iptables` / `ufw` |
+| Services | `launchctl` | `systemctl` |
+| Security Audit | SIP, Gatekeeper, FileVault | AppArmor, SELinux |
+
+### Roadmap (Agent)
+
+#### Phase 1: Server Forwarding (Next)
+- [ ] Add `--server` flag for server URL
+- [ ] Add `--agent-id` flag (auto-generate if not set)
+- [ ] Add `--tags` flag for agent metadata
+- [ ] Add `--interval` flag for forward frequency
+- [ ] Implement local event buffer
+- [ ] POST to `/api/v1/ingest` endpoint
+- [ ] Pull config from `/api/v1/config`
+
+#### Phase 2: Enhanced Telemetry
+- [ ] Process tree tracking (parent-child relationships)
+- [ ] Process hash collection (SHA256 of executables)
+- [ ] File integrity monitoring (FIM)
+- [ ] DNS query logging
+- [ ] Login/logout event tracking
+
+#### Phase 3: Response Actions
+- [ ] Kill process by PID
+- [ ] Quarantine file
+- [ ] Network isolation mode
+- [ ] Forensic data collection
+
+### Configuration (Planned)
+
+```yaml
+# /etc/sentinel/agent.yaml
+agent:
+  id: ""                    # Auto-generated UUID if empty
+  tags:
+    - production
+    - webserver
+
+server:
+  url: "https://sentinel-server:8443"
+  token: "${SENTINEL_TOKEN}"
+  interval: 30s
+  buffer_size: 1000         # Events to buffer if server unreachable
+
+monitoring:
+  processes: true
+  connections: true
+  temperature: true
+  interval: 10s
+
+fim:                        # File Integrity Monitoring
+  enabled: false
+  paths:
+    - /etc
+    - /usr/bin
+```
+
+### Installation
+
+```bash
+# macOS (Homebrew)
+brew tap [org]/sentinel
+brew install sentinel-agent
+
+# Linux (curl)
+curl -fsSL https://get.sentinel.dev | bash
+
+# From source
+git clone https://github.com/[org]/sentinel-agent
+cd sentinel-agent
+go build -o sentinel .
+sudo mv sentinel /usr/local/bin/
+```
+
+### Usage Examples
+
+```bash
+# Quick system check
+sentinel --metrics --json
+
+# Monitor with TUI
+sentinel --tui
+
+# Security audit
+sentinel --security-audit
+
+# Run as MCP server for AI assistant
+sentinel --mcp
+
+# Forward to server (planned)
+sentinel --server https://sentinel.corp:8443 --interval 30s
+```
+
+---
+
+## Sentinel Server
+
+### Overview
+
+Central aggregator that receives telemetry from all agents, stores events in a time-series database, and exposes fleet-wide operations via REST API and MCP.
+
+**Repository**: `github.com/[org]/sentinel-server`
+
+### Status: 🔲 Planned
+
+### Features (Planned)
+
+#### Core
+- [ ] Agent registration and heartbeat
+- [ ] Event ingestion API (`POST /api/v1/ingest`)
+- [ ] Configuration distribution (`GET /api/v1/config`)
+- [ ] Time-series storage (SQLite → DuckDB)
+- [ ] Event retention and rollup
+
+#### Search & Query
+- [ ] Full-text event search
+- [ ] Field-based filtering
+- [ ] Time-range queries
+- [ ] Aggregations (avg, max, min, count)
+
+#### Fleet Management
+- [ ] Agent inventory
+- [ ] Health monitoring
+- [ ] Tag-based grouping
+- [ ] Remote command push
+
+#### Alerting
+- [ ] Threshold-based rules
+- [ ] Pattern matching
+- [ ] Alert history
+- [ ] Notification actions
+
+#### Threat Intelligence
+- [ ] IOC blocklists (IP, domain, hash)
+- [ ] Automated matching
+- [ ] Feed ingestion
+- [ ] Threat hunting queries
+
+### API Endpoints (Planned)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/ingest` | Receive events from agents |
+| GET | `/api/v1/config/{agent_id}` | Return agent config |
+| GET | `/api/v1/agents` | List all agents |
+| GET | `/api/v1/agents/{id}` | Get agent details |
+| POST | `/api/v1/agents/{id}/command` | Send command to agent |
+| GET | `/api/v1/events` | Search events |
+| POST | `/api/v1/alerts` | Create alert rule |
+| GET | `/api/v1/alerts` | List alert rules |
+| GET | `/api/v1/alerts/history` | Get triggered alerts |
+| POST | `/api/v1/iocs` | Add IOC |
+| GET | `/api/v1/iocs` | List IOCs |
+| POST | `/api/v1/hunt` | Threat hunt query |
+
+### MCP Tools (Planned)
+
+| Tool | Description |
+|------|-------------|
+| `fleet_status` | Get all agents with health status |
+| `host_lookup` | Get details for specific host |
+| `search_events` | Query events across fleet |
+| `search_processes` | Find process by name/hash |
+| `search_connections` | Find network connections |
+| `fleet_metrics` | Aggregated metrics |
+| `create_alert` | Define alert rule |
+| `list_alerts` | Get all alert rules |
+| `get_alert_history` | Past triggered alerts |
+| `isolate_host` | Network isolate endpoint |
+| `unisolate_host` | Remove isolation |
+| `push_command` | Send command to agent |
+| `add_ioc` | Add indicator of compromise |
+| `remove_ioc` | Remove IOC |
+| `list_iocs` | List IOCs |
+| `threat_hunt` | Search for IOC matches |
+
+### Database Schema (Planned)
+
+```sql
+-- Events (all telemetry)
+CREATE TABLE events (
+    id          INTEGER PRIMARY KEY,
+    timestamp   DATETIME NOT NULL,
+    agent_id    TEXT NOT NULL,
+    hostname    TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    data        JSON NOT NULL
+);
+
+-- Agents registry
+CREATE TABLE agents (
+    agent_id    TEXT PRIMARY KEY,
+    hostname    TEXT NOT NULL,
+    os          TEXT,
+    arch        TEXT,
+    version     TEXT,
+    tags        JSON,
+    first_seen  DATETIME,
+    last_seen   DATETIME,
+    status      TEXT
+);
+
+-- IOC blocklist
+CREATE TABLE iocs (
+    id          INTEGER PRIMARY KEY,
+    type        TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    severity    TEXT,
+    source      TEXT,
+    added_at    DATETIME,
+    expires_at  DATETIME
+);
+
+-- Alert rules
+CREATE TABLE alert_rules (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    condition   JSON NOT NULL,
+    action      JSON NOT NULL,
+    enabled     BOOLEAN DEFAULT TRUE,
+    created_at  DATETIME
+);
+
+-- Alert history
+CREATE TABLE alert_history (
+    id           INTEGER PRIMARY KEY,
+    rule_id      INTEGER,
+    agent_id     TEXT,
+    triggered_at DATETIME,
+    event_data   JSON,
+    resolved     BOOLEAN DEFAULT FALSE
+);
+```
+
+---
+
+## Sentinel Console
+
+### Overview
+
+Web-based dashboard for fleet management, event investigation, and alert management.
+
+**Repository**: `github.com/[org]/sentinel-console`
+
+### Status: 🔲 Planned
+
+### Features (Planned)
+
+- [ ] Fleet overview (agent grid with health)
+- [ ] Real-time event stream
+- [ ] Event search interface
+- [ ] Process explorer
+- [ ] Network connection graph
+- [ ] Alert management
+- [ ] IOC management
+- [ ] Host detail view
+- [ ] User authentication
+
+### Tech Stack Options
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **Go + HTMX** | Single binary, no Node, fast | Less interactive |
+| **Go + React** | Rich interactions | Separate build, more deps |
+| **Go + Templ + HTMX** | Type-safe templates | Newer ecosystem |
+
+---
+
+## Sentinel Proto
+
+### Overview
+
+Shared type definitions, API contracts, and event schemas used by all components.
+
+**Repository**: `github.com/[org]/sentinel-proto`
+
+### Status: 🔲 Planned
+
+### Contents (Planned)
+
+```
+sentinel-proto/
+├── go.mod
+├── events/
+│   ├── metric.go       # MetricEvent struct
+│   ├── process.go      # ProcessEvent struct
+│   ├── connection.go   # ConnectionEvent struct
+│   └── alert.go        # AlertEvent struct
+├── api/
+│   ├── ingest.go       # IngestRequest/Response
+│   ├── config.go       # AgentConfig
+│   └── command.go      # CommandRequest/Response
+└── mcp/
+    ├── agent.go        # Agent MCP tool definitions
+    └── server.go       # Server MCP tool definitions
+```
+
+---
+
+## MCP Specifications
+
+### Agent MCP Server
+
+**Transport**: stdio (local process)
+
+```json
+{
+  "name": "sentinel-agent",
+  "version": "1.2.0",
+  "tools": [
+    {"name": "system_metrics", "description": "Get CPU, memory, disk, network stats"},
+    {"name": "process_list", "description": "List all running processes"},
+    {"name": "top_processes", "description": "Get top N processes by CPU/memory"},
+    {"name": "network_connections", "description": "List active network connections"},
+    {"name": "disk_usage", "description": "Get filesystem usage"},
+    {"name": "temperature", "description": "Get thermal readings"},
+    {"name": "uptime", "description": "Get system uptime"},
+    {"name": "block_ip", "description": "Block IP in firewall"},
+    {"name": "unblock_ip", "description": "Unblock IP from firewall"},
+    {"name": "security_audit", "description": "Run security posture check"},
+    {"name": "asset_info", "description": "Get hardware/software inventory"},
+    {"name": "list_services", "description": "List system services"},
+    {"name": "restart_service", "description": "Restart a service"},
+    {"name": "scan_ports", "description": "Scan ports on target"},
+    {"name": "check_updates", "description": "Check for OS updates"}
+  ]
+}
+```
+
+### Server MCP Server
+
+**Transport**: HTTP + SSE (remote access)
+
+```json
+{
+  "name": "sentinel-server",
+  "version": "1.0.0",
+  "tools": [
+    {"name": "fleet_status", "description": "Get all agents status"},
+    {"name": "host_lookup", "description": "Get specific host details"},
+    {"name": "search_events", "description": "Query events across fleet"},
+    {"name": "search_processes", "description": "Find processes fleet-wide"},
+    {"name": "search_connections", "description": "Find connections fleet-wide"},
+    {"name": "fleet_metrics", "description": "Aggregated fleet metrics"},
+    {"name": "create_alert", "description": "Create alert rule"},
+    {"name": "list_alerts", "description": "List alert rules"},
+    {"name": "get_alert_history", "description": "Get triggered alerts"},
+    {"name": "isolate_host", "description": "Network isolate endpoint"},
+    {"name": "unisolate_host", "description": "Remove isolation"},
+    {"name": "push_command", "description": "Send command to agent"},
+    {"name": "add_ioc", "description": "Add IOC to blocklist"},
+    {"name": "remove_ioc", "description": "Remove IOC"},
+    {"name": "list_iocs", "description": "List all IOCs"},
+    {"name": "threat_hunt", "description": "Hunt for IOC matches"}
+  ]
+}
+```
+
+---
+
+## Development Progress
+
+### Overall Status
+
+| Component | Version | Status | Progress |
+|-----------|---------|--------|----------|
+| sentinel-agent | 1.2.0 | ✅ Released | ████████████ 100% |
+| sentinel-server | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
+| sentinel-console | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
+| sentinel-proto | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
+
+### Changelog
+
+#### 2026-01-28
+- Created project wiki
+- Defined platform architecture
+- Documented MCP specifications
+- Planned repository structure
+
+#### 2026-01-23
+- Released sentinel-agent v1.2.0
+- Added 7 new monitoring features
+- Added Linux platform support
+- Verified all CLI commands working
+
+---
+
+## Contributing
+
+1. Fork the relevant repository
+2. Create a feature branch
+3. Make changes with tests
+4. Submit pull request
+
+## License
+
+MIT License - see LICENSE in each repository
