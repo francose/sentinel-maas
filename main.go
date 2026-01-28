@@ -317,12 +317,53 @@ type AuditCheck struct {
 }
 
 const (
-	Version = "1.2.0"
+	Version = "1.3.0"
 )
 
 // Platform-specific constants are defined in platform_darwin.go and platform_linux.go:
 // - ConfigDir, DefaultConfigPath
 // - SentinelPFAnchor, SentinelPFConf (macOS only)
+
+// --- FORWARDING DATA STRUCTURES ---
+
+// ForwardConfig holds server forwarding configuration
+type ForwardConfig struct {
+	ServerURL    string
+	AgentID      string
+	Tags         []string
+	Interval     time.Duration
+	BufferSize   int
+	Timeout      time.Duration
+}
+
+// ForwardEvent is the envelope sent to sentinel-server
+type ForwardEvent struct {
+	AgentID    string                 `json:"agent_id"`
+	Hostname   string                 `json:"hostname"`
+	OS         string                 `json:"os"`
+	Arch       string                 `json:"arch"`
+	Version    string                 `json:"version"`
+	Tags       []string               `json:"tags,omitempty"`
+	Timestamp  string                 `json:"timestamp"`
+	EventType  string                 `json:"event_type"`
+	Data       map[string]interface{} `json:"data"`
+}
+
+// ForwardBatch is a batch of events sent to server
+type ForwardBatch struct {
+	AgentID   string         `json:"agent_id"`
+	Hostname  string         `json:"hostname"`
+	Timestamp string         `json:"timestamp"`
+	Events    []ForwardEvent `json:"events"`
+}
+
+// ServerResponse from sentinel-server ingest endpoint
+type ServerResponse struct {
+	Success    bool   `json:"success"`
+	Message    string `json:"message,omitempty"`
+	Error      string `json:"error,omitempty"`
+	EventsRecv int    `json:"events_received,omitempty"`
+}
 
 // --- GLOBAL STATE ---
 var (
@@ -372,6 +413,13 @@ func main() {
 	listServices := flag.Bool("services", false, "List running services (LaunchDaemons/Agents)")
 	restartSvc := flag.String("restart-service", "", "Restart a launchd service by label")
 	checkUpdates := flag.Bool("check-updates", false, "Check for available macOS updates")
+
+	// PHASE 6: Server Forwarding
+	serverURL := flag.String("server", "", "Sentinel server URL (e.g., https://sentinel-server:8443)")
+	forwardMode := flag.Bool("forward", false, "Run in forward mode, sending telemetry to sentinel-server")
+	agentID := flag.String("agent-id", "", "Agent ID (auto-generated if not set)")
+	agentTags := flag.String("tags", "", "Comma-separated agent tags (e.g., prod,webserver)")
+	forwardInterval := flag.Int("interval", 30, "Forward interval in seconds (default 30)")
 
 	// Info flags
 	versionFlag := flag.Bool("version", false, "Print version and exit")
@@ -430,6 +478,30 @@ func main() {
 	// PHASE 3: Daemon mode
 	if *daemonMode {
 		runDaemon()
+		return
+	}
+
+	// PHASE 6: Forward mode (to sentinel-server)
+	if *forwardMode {
+		// Parse tags
+		var tags []string
+		if *agentTags != "" {
+			tags = strings.Split(*agentTags, ",")
+			for i := range tags {
+				tags[i] = strings.TrimSpace(tags[i])
+			}
+		}
+
+		// Build forward config
+		fwdConfig := ForwardConfig{
+			ServerURL:  *serverURL,
+			AgentID:    *agentID,
+			Tags:       tags,
+			Interval:   time.Duration(*forwardInterval) * time.Second,
+			BufferSize: 100,
+			Timeout:    10 * time.Second,
+		}
+		runForwardMode(fwdConfig)
 		return
 	}
 
@@ -1002,6 +1074,330 @@ func runHeadlessCollection() {
 	telemetry := collectTelemetry()
 	b, _ := json.Marshal(telemetry)
 	fmt.Println(string(b))
+}
+
+// ============================================================================
+// PHASE 6: FORWARD MODE (SENTINEL-SERVER)
+// ============================================================================
+
+// generateAgentID creates a unique agent ID based on hostname and MAC address
+func generateAgentID() string {
+	hostname := getHostname()
+
+	// Try to get a MAC address for uniqueness
+	interfaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range interfaces {
+			if len(iface.HardwareAddr) > 0 && iface.Flags&net.FlagLoopback == 0 {
+				// Use first 6 chars of MAC as suffix
+				mac := strings.ReplaceAll(iface.HardwareAddr.String(), ":", "")
+				if len(mac) >= 6 {
+					return fmt.Sprintf("sentinel-%s-%s", strings.ToLower(hostname), mac[:6])
+				}
+			}
+		}
+	}
+
+	// Fallback: hostname + random suffix
+	return fmt.Sprintf("sentinel-%s-%d", strings.ToLower(hostname), time.Now().UnixNano()%100000)
+}
+
+// runForwardMode runs the agent in forward mode, sending telemetry to sentinel-server
+func runForwardMode(cfg ForwardConfig) {
+	// Validate server URL
+	if cfg.ServerURL == "" {
+		result := ActionResult{
+			Action:    "forward",
+			Error:     "No server URL specified",
+			ErrorCode: "CONFIG_MISSING",
+			Fix:       "Use --server https://your-sentinel-server:8443",
+		}
+		outputJSON(result)
+		os.Exit(1)
+	}
+
+	// Generate agent ID if not provided
+	if cfg.AgentID == "" {
+		cfg.AgentID = generateAgentID()
+	}
+
+	// Minimum interval
+	if cfg.Interval < 10*time.Second {
+		cfg.Interval = 30 * time.Second
+	}
+
+	// Print startup info
+	fmt.Fprintf(os.Stderr, "🛡️  Sentinel Forward Mode\n")
+	fmt.Fprintf(os.Stderr, "   Agent ID:  %s\n", cfg.AgentID)
+	fmt.Fprintf(os.Stderr, "   Server:    %s\n", cfg.ServerURL)
+	fmt.Fprintf(os.Stderr, "   Interval:  %s\n", cfg.Interval)
+	if len(cfg.Tags) > 0 {
+		fmt.Fprintf(os.Stderr, "   Tags:      %s\n", strings.Join(cfg.Tags, ", "))
+	}
+	fmt.Fprintf(os.Stderr, "\n")
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: cfg.Timeout,
+	}
+
+	// Build ingest URL
+	ingestURL := strings.TrimSuffix(cfg.ServerURL, "/") + "/api/v1/ingest"
+
+	ticker := time.NewTicker(cfg.Interval)
+	defer ticker.Stop()
+
+	// Send immediately on start
+	sendForwardBatch(client, ingestURL, cfg)
+
+	// Then on interval
+	for range ticker.C {
+		sendForwardBatch(client, ingestURL, cfg)
+	}
+}
+
+// collectForwardEvents gathers all telemetry and returns as ForwardEvents
+func collectForwardEvents(cfg ForwardConfig) []ForwardEvent {
+	var events []ForwardEvent
+	timestamp := time.Now().Format(time.RFC3339)
+	hostname := getHostname()
+
+	// Base event fields
+	baseEvent := ForwardEvent{
+		AgentID:   cfg.AgentID,
+		Hostname:  hostname,
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
+		Version:   Version,
+		Tags:      cfg.Tags,
+		Timestamp: timestamp,
+	}
+
+	// 1. System Metrics Event
+	metricsEvent := baseEvent
+	metricsEvent.EventType = "metrics"
+	metricsEvent.Data = collectMetricsData()
+	events = append(events, metricsEvent)
+
+	// 2. Process Event (top processes)
+	processEvent := baseEvent
+	processEvent.EventType = "processes"
+	processEvent.Data = collectProcessData()
+	events = append(events, processEvent)
+
+	// 3. Connections Event
+	connEvent := baseEvent
+	connEvent.EventType = "connections"
+	connEvent.Data = collectConnectionData()
+	events = append(events, connEvent)
+
+	return events
+}
+
+// collectMetricsData gathers CPU, memory, disk, network stats
+func collectMetricsData() map[string]interface{} {
+	data := make(map[string]interface{})
+
+	// CPU
+	cpuPercent, _ := cpu.Percent(0, false)
+	if len(cpuPercent) > 0 {
+		data["cpu_percent"] = cpuPercent[0]
+	}
+
+	// Load
+	l, _ := load.Avg()
+	if l != nil {
+		data["load_1"] = l.Load1
+		data["load_5"] = l.Load5
+		data["load_15"] = l.Load15
+	}
+
+	// Memory
+	m, _ := mem.VirtualMemory()
+	if m != nil {
+		data["memory_total"] = m.Total
+		data["memory_used"] = m.Used
+		data["memory_percent"] = m.UsedPercent
+	}
+
+	// Disk
+	d, _ := disk.Usage("/")
+	if d != nil {
+		data["disk_total"] = d.Total
+		data["disk_used"] = d.Used
+		data["disk_percent"] = d.UsedPercent
+	}
+
+	// Temperature (platform-specific)
+	temp := GetTemperature()
+	data["temperature"] = temp
+
+	// Firewall status
+	fwCmd := exec.Command("pfctl", "-s", "info")
+	fwOut, _ := fwCmd.CombinedOutput()
+	if strings.Contains(string(fwOut), "Status: Enabled") {
+		data["firewall"] = "enabled"
+	} else {
+		data["firewall"] = "disabled"
+	}
+
+	return data
+}
+
+// collectProcessData gathers top processes by CPU
+func collectProcessData() map[string]interface{} {
+	data := make(map[string]interface{})
+
+	procs, err := process.Processes()
+	if err != nil {
+		data["error"] = err.Error()
+		return data
+	}
+
+	type procInfo struct {
+		PID        int32   `json:"pid"`
+		Name       string  `json:"name"`
+		CPUPercent float64 `json:"cpu_percent"`
+		MemPercent float32 `json:"mem_percent"`
+		User       string  `json:"user"`
+	}
+
+	var procList []procInfo
+	for _, p := range procs {
+		cpu, _ := p.CPUPercent()
+		mem, _ := p.MemoryPercent()
+		name, _ := p.Name()
+		user, _ := p.Username()
+
+		procList = append(procList, procInfo{
+			PID:        p.Pid,
+			Name:       name,
+			CPUPercent: cpu,
+			MemPercent: mem,
+			User:       user,
+		})
+	}
+
+	// Sort by CPU and take top 20
+	sort.Slice(procList, func(i, j int) bool {
+		return procList[i].CPUPercent > procList[j].CPUPercent
+	})
+	if len(procList) > 20 {
+		procList = procList[:20]
+	}
+
+	data["processes"] = procList
+	data["total_count"] = len(procs)
+
+	return data
+}
+
+// collectConnectionData gathers active network connections
+func collectConnectionData() map[string]interface{} {
+	data := make(map[string]interface{})
+
+	conns, err := psnet.Connections("inet")
+	if err != nil {
+		data["error"] = err.Error()
+		return data
+	}
+
+	type connInfo struct {
+		PID      int32  `json:"pid"`
+		Process  string `json:"process"`
+		Protocol string `json:"protocol"`
+		LocalIP  string `json:"local_ip"`
+		LocalPort uint32 `json:"local_port"`
+		RemoteIP string `json:"remote_ip"`
+		RemotePort uint32 `json:"remote_port"`
+		Status   string `json:"status"`
+	}
+
+	var connList []connInfo
+	established := 0
+	listening := 0
+
+	for _, c := range conns {
+		if c.Status == "ESTABLISHED" {
+			established++
+		} else if c.Status == "LISTEN" {
+			listening++
+		}
+
+		// Only include established and listening for the list
+		if c.Status == "ESTABLISHED" || c.Status == "LISTEN" {
+			procName := ""
+			if c.Pid > 0 {
+				if p, err := process.NewProcess(c.Pid); err == nil {
+					procName, _ = p.Name()
+				}
+			}
+
+			proto := "tcp"
+			if c.Type == syscall.SOCK_DGRAM {
+				proto = "udp"
+			}
+
+			connList = append(connList, connInfo{
+				PID:        c.Pid,
+				Process:    procName,
+				Protocol:   proto,
+				LocalIP:    c.Laddr.IP,
+				LocalPort:  c.Laddr.Port,
+				RemoteIP:   c.Raddr.IP,
+				RemotePort: c.Raddr.Port,
+				Status:     c.Status,
+			})
+		}
+	}
+
+	data["connections"] = connList
+	data["total"] = len(conns)
+	data["established"] = established
+	data["listening"] = listening
+
+	return data
+}
+
+// sendForwardBatch collects and sends events to sentinel-server
+func sendForwardBatch(client *http.Client, url string, cfg ForwardConfig) {
+	events := collectForwardEvents(cfg)
+
+	batch := ForwardBatch{
+		AgentID:   cfg.AgentID,
+		Hostname:  getHostname(),
+		Timestamp: time.Now().Format(time.RFC3339),
+		Events:    events,
+	}
+
+	jsonData, err := json.Marshal(batch)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️  JSON marshal error: %v\n", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️  Request error: %v\n", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Agent-ID", cfg.AgentID)
+	req.Header.Set("X-Agent-Version", Version)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️  Server unreachable: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		fmt.Fprintf(os.Stderr, "📡 Forwarded %d events [%s]\n", len(events), time.Now().Format("15:04:05"))
+	} else {
+		fmt.Fprintf(os.Stderr, "⚠️  Server returned %d\n", resp.StatusCode)
+	}
 }
 
 // ============================================================================

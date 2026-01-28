@@ -136,6 +136,7 @@ The Sentinel Agent runs on each monitored endpoint, collecting system metrics, t
 | TUI Dashboard | `--tui` | ✅ |
 | Watch Mode | `--watch` | ✅ |
 | MCP Server | `--mcp` | ✅ |
+| Forward Mode | `--forward` | ✅ |
 
 ### Platform Support
 
@@ -158,14 +159,28 @@ The Sentinel Agent runs on each monitored endpoint, collecting system metrics, t
 
 ### Roadmap (Agent)
 
-#### Phase 1: Server Forwarding (Next)
-- [ ] Add `--server` flag for server URL
-- [ ] Add `--agent-id` flag (auto-generate if not set)
-- [ ] Add `--tags` flag for agent metadata
-- [ ] Add `--interval` flag for forward frequency
-- [ ] Implement local event buffer
-- [ ] POST to `/api/v1/ingest` endpoint
-- [ ] Pull config from `/api/v1/config`
+#### Phase 1: Server Forwarding ✅ Complete (v1.3.0)
+- [x] Add `--server` flag for server URL
+- [x] Add `--agent-id` flag (auto-generate if not set)
+- [x] Add `--tags` flag for agent metadata
+- [x] Add `--interval` flag for forward frequency
+- [x] Add `--forward` flag for forward mode
+- [x] POST to `/api/v1/ingest` endpoint
+- [ ] Pull config from `/api/v1/config` (requires server)
+
+**Usage:**
+```bash
+# Start forwarding to sentinel-server
+sentinel --forward --server https://sentinel-server:8443 --tags prod,webserver
+
+# With custom interval and agent ID
+sentinel --forward --server https://localhost:8443 --agent-id myhost-001 --interval 60
+```
+
+**Events sent per interval:**
+- `metrics` - CPU, memory, disk, load, temperature, firewall status
+- `processes` - Top 20 processes by CPU
+- `connections` - Established and listening connections
 
 #### Phase 2: Enhanced Telemetry
 - [ ] Process tree tracking (parent-child relationships)
@@ -518,7 +533,7 @@ sentinel-proto/
 
 | Component | Version | Status | Progress |
 |-----------|---------|--------|----------|
-| sentinel-agent | 1.2.0 | ✅ Released | ████████████ 100% |
+| sentinel-agent | 1.3.0 | ✅ Released | ████████████ 100% |
 | sentinel-server | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
 | sentinel-console | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
 | sentinel-proto | - | 🔲 Planned | ░░░░░░░░░░░░ 0% |
@@ -526,6 +541,11 @@ sentinel-proto/
 ### Changelog
 
 #### 2026-01-28
+- Released sentinel-agent v1.3.0
+- Added server forwarding mode (`--forward`)
+- Added `--server`, `--agent-id`, `--tags`, `--interval` flags
+- Auto-generates agent ID from hostname + MAC
+- Sends metrics, processes, connections events to server
 - Created project wiki
 - Defined platform architecture
 - Documented MCP specifications
